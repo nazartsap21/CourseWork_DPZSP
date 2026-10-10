@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: forkful-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: forkful
+      POSTGRES_USER: forkful
+      POSTGRES_PASSWORD: forkful
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
