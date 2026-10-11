@@ -4,6 +4,8 @@ __pycache__/
 *.pyo
 *.pyd
 .venv/
+# SQLite fallback database
+backend/instance/
 venv/
 .env
 .env.*

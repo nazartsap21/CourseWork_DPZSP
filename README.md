@@ -47,18 +47,15 @@ Forkful is the food delivery service for the course project. The repository cont
    docker compose up -d postgres
    ```
 
-5. Apply the initial migration:
+5. Apply the migrations and load the demo data:
 
    ```bash
    cd backend
-   export FLASK_APP=app
-   export SECRET_KEY=change-me
-   export JWT_SECRET_KEY=change-me-too
-   export DATABASE_URL=postgresql+psycopg://forkful:forkful@localhost:5432/forkful
-   flask db init
-   flask db migrate -m "initial scaffold"
-   flask db upgrade
+   flask --app app db upgrade
+   python seed.py
    ```
+
+   `backend/.env` is loaded automatically. The seed is idempotent: running it again only adds rows that are missing.
 
 6. Start the backend:
 
@@ -76,6 +73,19 @@ Forkful is the food delivery service for the course project. The repository cont
 
 8. Open `http://localhost:3000` to view the app.
 
+## Demo accounts
+
+All seeded accounts use the password `forkful123`.
+
+| Role | Email |
+|---|---|
+| Admin | `admin@example.com` |
+| Courier | `taras.courier@example.com`, `andrii.courier@example.com` |
+| Customer (regular, premium card, order history) | `olena@example.com` |
+| Customer (short history) | `maksym@example.com` |
+
+The seed creates 10 restaurants in central Lviv across 8 cuisines, about 100 dishes, past orders with status history, reviews, favorites and loyalty points. Money is stored as integer kopiyky (1 UAH = 100).
+
 ## Default runtime note
 
 The backend code falls back to an SQLite database when `DATABASE_URL` is absent so the project can start cleanly in a minimal local environment. The repository still includes the PostgreSQL Docker Compose configuration that the full course project expects.
@@ -86,6 +96,8 @@ The backend code falls back to an SQLite database when `DATABASE_URL` is absent 
 backend/
   app/
   migrations/
+  seed.py
+  seed_data.py
   requirements.txt
   .env.example
 frontend/
@@ -95,7 +107,6 @@ frontend/
   next.config.ts
 docker-compose.yml
 README.md
-PROGRESS.md
 ```
 
 ## Useful commands

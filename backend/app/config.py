@@ -1,5 +1,9 @@
 import os
-from typing import Type
+
+from dotenv import load_dotenv
+
+# Loaded here so every entry point (flask CLI, run.py, seed.py) sees backend/.env.
+load_dotenv()
 
 
 class BaseConfig:
@@ -26,7 +30,7 @@ class TestingConfig(BaseConfig):
     SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
 
 
-config: dict[str, Type[BaseConfig]] = {
+config: dict[str, type[BaseConfig]] = {
     "default": DevelopmentConfig,
     "development": DevelopmentConfig,
     "production": ProductionConfig,

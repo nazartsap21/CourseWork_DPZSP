@@ -1,5 +1,6 @@
 from flask import Flask
 
+from . import models  # noqa: F401  (registers tables for Alembic)
 from .api.v1 import api_v1_bp
 from .config import config
 from .extensions import db, jwt, migrate
