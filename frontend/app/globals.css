@@ -9,6 +9,9 @@
   --accent: #c95437;
   --accent-strong: #9b3826;
   --sage: #5f6e4d;
+  /* Extra warm tones, used for restaurant cover fallbacks. */
+  --saffron: #d39a3a;
+  --clay: #9a6b4f;
   --ink: #1d1918;
   --muted-ink: #655d5a;
   --border: rgba(76, 54, 48, 0.12);
@@ -23,6 +26,8 @@
   --color-accent: var(--accent);
   --color-accent-strong: var(--accent-strong);
   --color-sage: var(--sage);
+  --color-saffron: var(--saffron);
+  --color-clay: var(--clay);
   --color-ink: var(--ink);
   --color-muted-ink: var(--muted-ink);
   --color-line: var(--border);
