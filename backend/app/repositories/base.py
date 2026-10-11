@@ -1,4 +1,19 @@
+from dataclasses import dataclass
+from math import ceil
+
 from sqlalchemy.orm import Session, scoped_session
+
+
+@dataclass(frozen=True)
+class PageResult[T]:
+    items: list[T]
+    total: int
+    page: int
+    per_page: int
+
+    @property
+    def pages(self) -> int:
+        return ceil(self.total / self.per_page) if self.per_page else 0
 
 
 class SqlAlchemyRepository:
