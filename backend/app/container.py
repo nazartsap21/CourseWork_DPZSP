@@ -8,10 +8,23 @@ from dataclasses import dataclass
 
 from flask import current_app
 
+from .domain.delivery.strategies import (
+    DeliveryStrategyResolver,
+    ExpressDelivery,
+    PickupDelivery,
+    StandardDelivery,
+)
 from .extensions import db
-from .repositories import CuisineRepository, DishRepository, RestaurantRepository, UserRepository
+from .repositories import (
+    CuisineRepository,
+    DishRepository,
+    LoyaltyRepository,
+    RestaurantRepository,
+    UserRepository,
+)
 from .services.auth_service import AuthService
 from .services.catalog_service import CatalogService
+from .services.quote_service import OrderQuoteService
 
 EXTENSION_KEY = "forkful_services"
 
@@ -20,14 +33,21 @@ EXTENSION_KEY = "forkful_services"
 class Services:
     auth: AuthService
     catalog: CatalogService
+    quotes: OrderQuoteService
 
 
 def build_services() -> Services:
     session = db.session
+    restaurants = RestaurantRepository(session)
+    dishes = DishRepository(session)
+    delivery_strategies = DeliveryStrategyResolver(
+        [StandardDelivery(), ExpressDelivery(), PickupDelivery()]
+    )
     return Services(
         auth=AuthService(UserRepository(session)),
-        catalog=CatalogService(
-            RestaurantRepository(session), DishRepository(session), CuisineRepository(session)
+        catalog=CatalogService(restaurants, dishes, CuisineRepository(session)),
+        quotes=OrderQuoteService(
+            restaurants, dishes, LoyaltyRepository(session), delivery_strategies
         ),
     )
 

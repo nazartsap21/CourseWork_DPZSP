@@ -88,7 +88,6 @@ class RestaurantRepository(SqlAlchemyRepository):
         if query.price_levels:
             stmt = stmt.where(self._price_level_condition(query.price_levels))
         if query.max_delivery_minutes is not None:
-            # Filter on the upper end of the catalog window: "delivered within X min".
             slowest_ride = CATALOG_TRAVEL_MINUTES[1]
             stmt = stmt.where(
                 Restaurant.avg_prep_minutes + slowest_ride <= query.max_delivery_minutes
@@ -121,6 +120,11 @@ class RestaurantRepository(SqlAlchemyRepository):
         row = self._session.execute(stmt).first()
         return self._to_stats(row.tuple()) if row else None
 
+    def get_active(self, restaurant_id: int) -> Restaurant | None:
+        return self._session.scalar(
+            select(Restaurant).where(Restaurant.id == restaurant_id, Restaurant.is_active.is_(True))
+        )
+
     def rating_breakdown(self, restaurant_id: int) -> dict[int, int]:
         rows = self._session.execute(
             select(Review.rating, func.count(Review.id))
@@ -131,6 +135,16 @@ class RestaurantRepository(SqlAlchemyRepository):
 
 
 class DishRepository(SqlAlchemyRepository):
+    def get_many_for_restaurant(self, restaurant_id: int, dish_ids: list[int]) -> list[Dish]:
+        """Only dishes that belong to the restaurant; foreign ids are simply absent."""
+        if not dish_ids:
+            return []
+        return list(
+            self._session.scalars(
+                select(Dish).where(Dish.restaurant_id == restaurant_id, Dish.id.in_(dish_ids))
+            )
+        )
+
     def list_for_restaurant(self, restaurant_id: int) -> list[Dish]:
         return list(
             self._session.scalars(

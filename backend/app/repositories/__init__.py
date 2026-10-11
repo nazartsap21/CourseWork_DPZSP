@@ -6,12 +6,14 @@ from .catalog_repository import (
     RestaurantRepository,
     RestaurantStats,
 )
+from .loyalty_repository import LoyaltyRepository
 from .user_repository import UserRepository
 
 __all__ = [
     "CuisineRepository",
     "CuisineWithCount",
     "DishRepository",
+    "LoyaltyRepository",
     "PageResult",
     "RestaurantRepository",
     "RestaurantStats",
