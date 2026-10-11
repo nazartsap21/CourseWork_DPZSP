@@ -115,6 +115,10 @@ README.md
 # backend health check
 curl http://127.0.0.1:5000/api/v1/health
 
+# sign in and call a protected endpoint with the returned token
+curl -X POST http://127.0.0.1:5000/api/v1/auth/login   -H "Content-Type: application/json"   -d '{"email": "olena@example.com", "password": "forkful123"}'
+curl http://127.0.0.1:5000/api/v1/auth/me -H "Authorization: Bearer <access_token>"
+
 # frontend production build
 cd frontend && npm run build
 ```

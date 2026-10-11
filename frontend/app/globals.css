@@ -18,7 +18,14 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
+  --color-surface: var(--surface);
+  --color-muted: var(--muted);
   --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-sage: var(--sage);
+  --color-ink: var(--ink);
+  --color-muted-ink: var(--muted-ink);
+  --color-line: var(--border);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
   --font-serif: var(--font-fraunces);

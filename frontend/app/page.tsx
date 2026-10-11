@@ -15,27 +15,6 @@ const restaurantCards = [
 export default function Home() {
   return (
     <main className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
-      <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6 lg:px-8">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--accent)] text-sm font-bold text-white shadow-sm">
-            F
-          </div>
-          <div>
-            <p className="font-serif text-2xl tracking-tight text-[var(--ink)]">Forkful</p>
-          </div>
-        </div>
-
-        <nav className="hidden items-center gap-8 text-sm font-medium text-[var(--muted-ink)] md:flex">
-          <a href="#restaurants">Restaurants</a>
-          <a href="#features">Features</a>
-          <a href="#account">Account</a>
-        </nav>
-
-        <button className="rounded-full bg-[var(--accent)] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[var(--accent-strong)]">
-          Sign in
-        </button>
-      </header>
-
       <section className="mx-auto grid max-w-6xl gap-8 px-6 pb-12 pt-6 lg:grid-cols-[1.1fr_0.9fr] lg:px-8 lg:py-12">
         <div className="flex flex-col justify-center">
           <p className="mb-4 text-xs font-semibold uppercase tracking-[0.28rem] text-[var(--sage)]">
