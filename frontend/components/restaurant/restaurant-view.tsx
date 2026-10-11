@@ -2,12 +2,14 @@
 
 import { ArrowLeft, MapPin } from "lucide-react";
 import Link from "next/link";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import useSWR from "swr";
 
+import { OrderBar } from "@/components/cart/order-bar";
 import { RestaurantCover } from "@/components/catalog/restaurant-cover";
 import { PriceLevelMark } from "@/components/catalog/restaurant-meta";
 import type { ApiError } from "@/lib/api";
+import type { CartRestaurant } from "@/lib/cart-store";
 import { formatDeliveryWindow, formatPrice } from "@/lib/format";
 import type { Menu, RestaurantDetails } from "@/types/catalog";
 
@@ -32,6 +34,14 @@ export function RestaurantView({ restaurantId }: { restaurantId: number }) {
     valid ? `/restaurants/${restaurantId}/menu` : null,
   );
 
+  const cartRestaurant = useMemo<CartRestaurant | null>(
+    () =>
+      restaurant
+        ? { id: restaurant.id, name: restaurant.name, min_order_amount: restaurant.min_order_amount }
+        : null,
+    [restaurant],
+  );
+
   useEffect(() => {
     if (restaurant) document.title = `${restaurant.name} · Forkful`;
   }, [restaurant]);
@@ -52,7 +62,7 @@ export function RestaurantView({ restaurantId }: { restaurantId: number }) {
   }
 
   return (
-    <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-16 pt-6 sm:px-6 lg:px-8">
+    <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-28 pt-6 sm:px-6 lg:px-8">
       <Link href="/" className="inline-flex items-center gap-1.5 text-sm text-muted-ink hover:text-ink">
         <ArrowLeft aria-hidden className="h-4 w-4" />
         All restaurants
@@ -111,9 +121,10 @@ export function RestaurantView({ restaurantId }: { restaurantId: number }) {
         ) : !menu ? (
           <MenuSkeleton />
         ) : (
-          <MenuSections menu={menu} />
+          <MenuSections menu={menu} restaurant={cartRestaurant} />
         )}
       </div>
+      <OrderBar restaurantId={restaurantId} />
     </main>
   );
 }

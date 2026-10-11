@@ -1,8 +1,10 @@
 "use client";
 
+import { ShoppingBag } from "lucide-react";
 import Link from "next/link";
 
 import { useAuth } from "@/lib/auth";
+import { useCart } from "@/lib/cart";
 
 import { UserMenu } from "./user-menu";
 
@@ -13,6 +15,7 @@ const ROLE_LINKS = {
 
 export function SiteHeader() {
   const { user, status } = useAuth();
+  const { canOrder, itemCount } = useCart();
   const roleLink = user && user.role !== "customer" ? ROLE_LINKS[user.role] : null;
 
   return (
@@ -30,6 +33,21 @@ export function SiteHeader() {
               className="rounded-full px-3 py-1.5 text-sm font-medium text-muted-ink transition hover:bg-surface hover:text-ink"
             >
               {roleLink.label}
+            </Link>
+          )}
+
+          {canOrder && (
+            <Link
+              href="/cart"
+              aria-label={itemCount > 0 ? `Cart, ${itemCount} items` : "Cart"}
+              className="relative flex h-9 w-9 items-center justify-center rounded-full text-ink transition hover:bg-surface"
+            >
+              <ShoppingBag aria-hidden className="h-5 w-5" />
+              {itemCount > 0 && (
+                <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[0.65rem] font-semibold leading-none text-white">
+                  {itemCount}
+                </span>
+              )}
             </Link>
           )}
 
