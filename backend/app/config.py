@@ -17,6 +17,8 @@ class BaseConfig:
         "sqlite:///forkful.db",
     )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    # Couriers deliver within this straight-line radius from the restaurant.
+    DELIVERY_RADIUS_KM = float(os.getenv("DELIVERY_RADIUS_KM", "7"))
     JSON_SORT_KEYS = False
 
 

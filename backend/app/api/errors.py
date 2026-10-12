@@ -52,7 +52,8 @@ def register_error_handlers(app: Flask, jwt: JWTManager) -> None:
     @app.errorhandler(DomainError)
     def handle_domain_error(exc: DomainError) -> tuple[Response, int]:
         status = next((code for cls, code in DOMAIN_STATUS.items() if isinstance(exc, cls)), 400)
-        return error_response(status, exc.code, exc.message)
+        details = [{"field": exc.field, "message": exc.message}] if exc.field else None
+        return error_response(status, exc.code, exc.message, details)
 
     @app.errorhandler(ValidationError)
     def handle_validation_error(exc: ValidationError) -> tuple[Response, int]:

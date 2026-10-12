@@ -11,6 +11,7 @@ from ...schemas.orders import (
     QuotedItemOut,
     QuoteIn,
     QuoteOut,
+    ValidationIssueOut,
 )
 from ...services.quote_service import Quote, QuoteItemRequest, QuoteRequest
 from ..security import current_user_id
@@ -21,18 +22,19 @@ orders_bp = Blueprint("orders", __name__, url_prefix="/orders")
 
 def _quote_out(quote: Quote) -> QuoteOut:
     price = quote.price
+    error = quote.validation_error
     return QuoteOut(
-        restaurant_id=quote.restaurant.id,
+        restaurant_id=quote.draft.restaurant.id,
         items=[
             QuotedItemOut(
-                dish_id=item.dish_id,
-                name=item.name,
-                price=item.price,
+                dish_id=item.dish.id,
+                name=item.dish.name,
+                price=item.dish.price,
                 quantity=item.quantity,
                 line_total=item.line_total,
-                is_available=item.is_available,
+                is_available=item.dish.is_available,
             )
-            for item in quote.items
+            for item in quote.draft.items
         ],
         delivery=DeliveryOut(
             method=quote.delivery.method,
@@ -57,6 +59,11 @@ def _quote_out(quote: Quote) -> QuoteOut:
             points_balance=quote.loyalty.points_balance,
             max_redeemable_points=quote.max_redeemable_points,
         ),
+        validation_error=ValidationIssueOut(
+            code=error.code, message=error.message, field=error.field
+        )
+        if error
+        else None,
     )
 
 
@@ -64,7 +71,8 @@ def _quote_out(quote: Quote) -> QuoteOut:
 @jwt_required(optional=True)
 def quote() -> Response:
     """Price breakdown for a cart. Guests get base prices; signed-in customers
-    also get their loyalty discounts."""
+    also get their loyalty discounts. Broken order rules come back as
+    `validation_error` (status 200) so the checkout can show them next to the price."""
     body = parse_body(QuoteIn)
     is_customer = get_jwt().get("role") == UserRole.CUSTOMER
     destination = (

@@ -5,6 +5,12 @@ from datetime import UTC, datetime
 from ..domain.delivery.geo import GeoPoint
 from ..domain.delivery.strategies import DeliveryContext, DeliveryQuote, DeliveryStrategyResolver
 from ..domain.errors import BusinessRuleError, NotFoundError
+from ..domain.orders.builder import DishSnapshot, OrderBuilder, OrderDraft, RestaurantSnapshot
+from ..domain.orders.validation import (
+    OrderValidationContext,
+    OrderValidationError,
+    OrderValidator,
+)
 from ..domain.pricing.decorators import PriceBreakdown
 from ..domain.pricing.loyalty import (
     GUEST_LOYALTY,
@@ -14,7 +20,7 @@ from ..domain.pricing.loyalty import (
     max_redeemable_points,
 )
 from ..domain.pricing.policy import calculate_order_price
-from ..models import LoyaltySettings, Restaurant
+from ..models import Dish, LoyaltyAccount, LoyaltySettings, Restaurant
 from ..models.base import utcnow
 from ..repositories import DishRepository, LoyaltyRepository, RestaurantRepository
 
@@ -35,28 +41,15 @@ class QuoteRequest:
 
 
 @dataclass(frozen=True)
-class QuotedItem:
-    """Prices come from the database, never from the client."""
-
-    dish_id: int
-    name: str
-    price: int
-    quantity: int
-    is_available: bool
-
-    @property
-    def line_total(self) -> int:
-        return self.price * self.quantity
-
-
-@dataclass(frozen=True)
 class Quote:
-    restaurant: Restaurant
-    items: list[QuotedItem]
+    draft: OrderDraft
     delivery: DeliveryQuote
     price: PriceBreakdown
     loyalty: LoyaltyStatus
     max_redeemable_points: int
+    # First broken business rule, if any. A quote is still priced so the
+    # checkout can show the numbers next to the problem.
+    validation_error: OrderValidationError | None
 
 
 def _rules(settings: LoyaltySettings) -> LoyaltyRules:
@@ -69,12 +62,35 @@ def _rules(settings: LoyaltySettings) -> LoyaltyRules:
     )
 
 
-class OrderQuoteService:
-    """Prices a prospective order: dishes from the DB, delivery via the matching
-    `DeliveryStrategy`, discounts via the `PriceComponent` decorator chain.
+def _restaurant_snapshot(restaurant: Restaurant) -> RestaurantSnapshot:
+    return RestaurantSnapshot(
+        id=restaurant.id,
+        name=restaurant.name,
+        is_active=restaurant.is_active,
+        location=GeoPoint(restaurant.lat, restaurant.lng),
+        prep_minutes=restaurant.avg_prep_minutes,
+        min_order_amount=restaurant.min_order_amount,
+    )
 
-    Used by `POST /orders/quote` now and by checkout later, so the price the
-    customer sees and the price they are charged come from the same code.
+
+def _dish_snapshot(dish: Dish) -> DishSnapshot:
+    return DishSnapshot(
+        id=dish.id,
+        restaurant_id=dish.restaurant_id,
+        name=dish.name,
+        price=dish.price,
+        is_available=dish.is_available,
+    )
+
+
+class OrderQuoteService:
+    """Prices and validates a prospective order.
+
+    Assembles it with `OrderBuilder`, prices delivery with the matching
+    `DeliveryStrategy`, applies discounts through the `PriceComponent`
+    decorators and runs the `OrderValidator` chain. Used by `POST /orders/quote`
+    and later by checkout, so the quoted and the charged price come from the
+    same code.
     """
 
     def __init__(
@@ -83,72 +99,89 @@ class OrderQuoteService:
         dishes: DishRepository,
         loyalty: LoyaltyRepository,
         delivery_strategies: DeliveryStrategyResolver,
+        validation_chain: OrderValidator,
+        delivery_radius_km: float,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._restaurants = restaurants
         self._dishes = dishes
         self._loyalty = loyalty
         self._delivery_strategies = delivery_strategies
+        self._validation_chain = validation_chain
+        self._delivery_radius_km = delivery_radius_km
         self._clock = clock
 
     def quote(self, request: QuoteRequest, customer_id: int | None) -> Quote:
-        restaurant = self._restaurants.get_active(request.restaurant_id)
-        if restaurant is None:
-            raise NotFoundError("Restaurant not found.", "RESTAURANT_NOT_FOUND")
+        draft = self._build_draft(request, customer_id)
 
-        items = self._price_items(restaurant.id, request.items)
-        subtotal = sum(item.line_total for item in items)
-
-        strategy = self._delivery_strategies.resolve(request.delivery_method)
+        strategy = self._delivery_strategies.resolve(draft.delivery.method)
         delivery = strategy.quote(
             DeliveryContext(
-                restaurant=GeoPoint(restaurant.lat, restaurant.lng),
-                prep_minutes=restaurant.avg_prep_minutes,
-                destination=request.destination if strategy.requires_address else None,
+                restaurant=draft.restaurant.location,
+                prep_minutes=draft.restaurant.prep_minutes,
+                destination=draft.delivery.destination if strategy.requires_address else None,
             )
         )
 
         rules = _rules(self._loyalty.get_settings())
-        status = self._loyalty_status(customer_id, rules)
-        price = calculate_order_price(subtotal, delivery.fee, status, rules, request.bonus_points)
+        account = self._loyalty.get_account(customer_id) if customer_id is not None else None
+        status = self._loyalty_status(account, rules)
+        max_points = max_redeemable_points(rules, draft.subtotal, status.points_balance)
+
+        try:
+            self._validation_chain.validate(
+                OrderValidationContext(
+                    draft=draft,
+                    requires_address=strategy.requires_address,
+                    delivery_radius_km=self._delivery_radius_km,
+                    has_loyalty_account=account is not None,
+                    loyalty=status,
+                    max_redeemable_points=max_points,
+                )
+            )
+            validation_error = None
+        except OrderValidationError as error:
+            validation_error = error
+
+        price = calculate_order_price(
+            draft.subtotal, delivery.fee, status, rules, draft.requested_points
+        )
         return Quote(
-            restaurant=restaurant,
-            items=items,
+            draft=draft,
             delivery=delivery,
             price=price,
             loyalty=status,
-            max_redeemable_points=max_redeemable_points(rules, subtotal, status.points_balance),
+            max_redeemable_points=max_points,
+            validation_error=validation_error,
         )
 
-    def _price_items(
-        self, restaurant_id: int, requested: list[QuoteItemRequest]
-    ) -> list[QuotedItem]:
-        # The same dish sent twice is merged rather than rejected.
-        quantities: dict[int, int] = {}
-        for item in requested:
-            quantities[item.dish_id] = quantities.get(item.dish_id, 0) + item.quantity
+    def _build_draft(self, request: QuoteRequest, customer_id: int | None) -> OrderDraft:
+        restaurant = self._restaurants.get_by_id(request.restaurant_id)
+        if restaurant is None:
+            raise NotFoundError("Restaurant not found.", "RESTAURANT_NOT_FOUND")
 
-        dishes = {
-            d.id: d for d in self._dishes.get_many_for_restaurant(restaurant_id, list(quantities))
-        }
-        missing = [dish_id for dish_id in quantities if dish_id not in dishes]
+        dish_ids = list({item.dish_id for item in request.items})
+        dishes = {d.id: d for d in self._dishes.get_many_for_restaurant(restaurant.id, dish_ids)}
+        missing = [dish_id for dish_id in dish_ids if dish_id not in dishes]
         if missing:
+            # A reference to something that isn't on the menu is bad input, not a business
+            # rule, so it fails right away instead of going through the chain.
             raise BusinessRuleError(
-                f"Dishes {missing} are not on this restaurant's menu.", "DISH_NOT_FOUND"
+                f"Dishes {missing} are not on this restaurant's menu.",
+                "DISH_NOT_FOUND",
+                field="items",
             )
-        return [
-            QuotedItem(
-                dish_id=dish_id,
-                name=dishes[dish_id].name,
-                price=dishes[dish_id].price,
-                quantity=quantity,
-                is_available=dishes[dish_id].is_available,
-            )
-            for dish_id, quantity in quantities.items()
-        ]
 
-    def _loyalty_status(self, customer_id: int | None, rules: LoyaltyRules) -> LoyaltyStatus:
-        account = self._loyalty.get_account(customer_id) if customer_id is not None else None
+        builder = OrderBuilder(customer_id).for_restaurant(_restaurant_snapshot(restaurant))
+        for item in request.items:
+            builder.add_item(_dish_snapshot(dishes[item.dish_id]), item.quantity)
+        return (
+            builder.with_delivery(request.delivery_method, request.destination)
+            .redeem_points(request.bonus_points)
+            .build()
+        )
+
+    def _loyalty_status(self, account: LoyaltyAccount | None, rules: LoyaltyRules) -> LoyaltyStatus:
         if account is None:
             return GUEST_LOYALTY
         premium_until = account.premium_until

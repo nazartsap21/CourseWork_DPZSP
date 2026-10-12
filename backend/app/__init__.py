@@ -16,7 +16,7 @@ def create_app(config_name: str = "default") -> Flask:
     jwt.init_app(app)
     migrate.init_app(app, db)
 
-    app.extensions[EXTENSION_KEY] = build_services()
+    app.extensions[EXTENSION_KEY] = build_services(app.config)
     register_error_handlers(app, jwt)
     app.register_blueprint(api_v1_bp)
 

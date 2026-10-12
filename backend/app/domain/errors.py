@@ -6,9 +6,11 @@ layer maps the exception *category* to an HTTP status in one place
 class DomainError(Exception):
     code = "DOMAIN_ERROR"
 
-    def __init__(self, message: str, code: str | None = None) -> None:
+    def __init__(self, message: str, code: str | None = None, field: str | None = None) -> None:
         super().__init__(message)
         self.message = message
+        # Optional request field the error is about, so forms can show it inline.
+        self.field = field
         if code is not None:
             self.code = code
 

@@ -6,7 +6,7 @@ Built once in the app factory; blueprints fetch ready services via
 
 from dataclasses import dataclass
 
-from flask import current_app
+from flask import Config, current_app
 
 from .domain.delivery.strategies import (
     DeliveryStrategyResolver,
@@ -14,6 +14,7 @@ from .domain.delivery.strategies import (
     PickupDelivery,
     StandardDelivery,
 )
+from .domain.orders.validation import build_order_validation_chain
 from .extensions import db
 from .repositories import (
     CuisineRepository,
@@ -36,7 +37,7 @@ class Services:
     quotes: OrderQuoteService
 
 
-def build_services() -> Services:
+def build_services(config: Config) -> Services:
     session = db.session
     restaurants = RestaurantRepository(session)
     dishes = DishRepository(session)
@@ -47,7 +48,12 @@ def build_services() -> Services:
         auth=AuthService(UserRepository(session)),
         catalog=CatalogService(restaurants, dishes, CuisineRepository(session)),
         quotes=OrderQuoteService(
-            restaurants, dishes, LoyaltyRepository(session), delivery_strategies
+            restaurants,
+            dishes,
+            LoyaltyRepository(session),
+            delivery_strategies,
+            validation_chain=build_order_validation_chain(),
+            delivery_radius_km=config["DELIVERY_RADIUS_KM"],
         ),
     )
 

@@ -64,6 +64,12 @@ class LoyaltyOut(BaseModel):
     max_redeemable_points: int
 
 
+class ValidationIssueOut(BaseModel):
+    code: str
+    message: str
+    field: str | None
+
+
 class QuoteOut(BaseModel):
     """`lines` explain the total in display order; the flat fields match the Order columns."""
 
@@ -77,3 +83,5 @@ class QuoteOut(BaseModel):
     bonus_points_used: int
     total: int
     loyalty: LoyaltyOut
+    # First broken order rule (minimum order, zone, ...); null when the order can be placed.
+    validation_error: ValidationIssueOut | None
