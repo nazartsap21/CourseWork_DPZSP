@@ -11,6 +11,8 @@ from ...schemas.orders import (
     DeliveryOut,
     LoyaltyOut,
     OrderOut,
+    PaymentSessionOut,
+    PlacedOrderOut,
     PriceLineOut,
     QuotedItemOut,
     QuoteIn,
@@ -109,18 +111,25 @@ def quote() -> Response:
 @orders_bp.post("")
 @roles_required(UserRole.CUSTOMER)
 def place_order() -> tuple[Response, int]:
-    """Places an order through the CheckoutFacade. Broken order rules → 422."""
+    """Places an order through the CheckoutFacade. Broken order rules → 422.
+    For online payment the response carries `payment_redirect_url`."""
     body = parse_body(CheckoutIn)
     request = replace(
         _quote_request(body),
         delivery_address=body.delivery_address,
         delivery_note=body.delivery_note,
     )
-    order = get_services().checkout.place_order(
+    result = get_services().checkout.place_order(
         CheckoutRequest(quote=request, payment_method=body.payment_method),
         customer_id=current_user_id(),
     )
-    return jsonify(_order_out(order)), 201
+    placed = PlacedOrderOut.model_validate(
+        {
+            **OrderOut.model_validate(result.order).model_dump(),
+            "payment_redirect_url": result.payment_redirect_url,
+        }
+    )
+    return jsonify(placed.model_dump(mode="json")), 201
 
 
 @orders_bp.get("/<int:order_id>")
@@ -128,3 +137,11 @@ def place_order() -> tuple[Response, int]:
 def get_order(order_id: int) -> Response:
     order = get_services().orders.get_order(order_id, current_user_id(), get_jwt()["role"])
     return jsonify(_order_out(order))
+
+
+@orders_bp.post("/<int:order_id>/payment-session")
+@roles_required(UserRole.CUSTOMER)
+def restart_payment(order_id: int) -> tuple[Response, int]:
+    """Another payment attempt for an order still waiting for payment."""
+    redirect_url = get_services().payments.restart(order_id, current_user_id())
+    return jsonify(PaymentSessionOut(redirect_url=redirect_url).model_dump()), 201

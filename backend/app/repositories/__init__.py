@@ -8,6 +8,7 @@ from .catalog_repository import (
 )
 from .loyalty_repository import LoyaltyRepository
 from .order_repository import OrderRepository
+from .payment_repository import PaymentRepository
 from .user_repository import UserRepository
 
 __all__ = [
@@ -16,6 +17,7 @@ __all__ = [
     "DishRepository",
     "LoyaltyRepository",
     "OrderRepository",
+    "PaymentRepository",
     "PageResult",
     "RestaurantRepository",
     "RestaurantStats",

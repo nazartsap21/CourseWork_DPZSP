@@ -16,6 +16,7 @@ from ..domain.errors import (
     BusinessRuleError,
     ConflictError,
     DomainError,
+    ExternalServiceError,
     NotFoundError,
     PermissionDeniedError,
 )
@@ -26,6 +27,7 @@ DOMAIN_STATUS: dict[type[DomainError], int] = {
     BusinessRuleError: 422,
     AuthenticationError: 401,
     PermissionDeniedError: 403,
+    ExternalServiceError: 502,
 }
 
 

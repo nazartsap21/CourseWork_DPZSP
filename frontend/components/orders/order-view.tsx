@@ -6,6 +6,7 @@ import useSWR from "swr";
 
 import type { ApiError } from "@/lib/api";
 import { formatPrice } from "@/lib/format";
+import { usePayAgain } from "@/lib/payments";
 import { DELIVERY_METHOD_LABELS, ORDER_STATUS_LABELS, PAYMENT_METHOD_LABELS } from "@/lib/order-labels";
 import type { Order } from "@/types/orders";
 
@@ -21,6 +22,7 @@ function expectedBy(order: Order): string | null {
 export function OrderView({ orderId }: { orderId: number }) {
   const valid = Number.isInteger(orderId) && orderId > 0;
   const { data: order, error } = useSWR<Order, ApiError>(valid ? `/orders/${orderId}` : null);
+  const payment = usePayAgain(orderId);
 
   if (!valid || error?.status === 404) {
     return (
@@ -55,10 +57,12 @@ export function OrderView({ orderId }: { orderId: number }) {
 
   return (
     <main className="mx-auto w-full max-w-3xl flex-1 px-4 pb-16 pt-8 sm:px-6">
-      <p className="inline-flex items-center gap-2 text-sm font-medium text-sage">
-        <CheckCircle2 aria-hidden className="h-4 w-4" />
-        Order placed
-      </p>
+      {order.status !== "pending_payment" && (
+        <p className="inline-flex items-center gap-2 text-sm font-medium text-sage">
+          <CheckCircle2 aria-hidden className="h-4 w-4" />
+          Order placed
+        </p>
+      )}
       <h1 className="mt-2 font-serif text-4xl tracking-tight text-ink">Order #{order.id}</h1>
       <p className="mt-1 text-muted-ink">from {order.restaurant.name}</p>
 
@@ -90,9 +94,22 @@ export function OrderView({ orderId }: { orderId: number }) {
       </div>
 
       {order.status === "pending_payment" && (
-        <p className="mt-6 rounded-lg bg-surface px-4 py-3 text-sm text-ink">
-          The kitchen starts cooking as soon as the payment is confirmed.
-        </p>
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-surface px-4 py-3">
+          <p className="text-sm text-ink">The kitchen starts cooking as soon as the payment is confirmed.</p>
+          <button
+            type="button"
+            onClick={() => void payment.payAgain()}
+            disabled={payment.pending}
+            className="rounded-full bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-strong disabled:opacity-50"
+          >
+            {payment.pending ? "Opening payment…" : `Pay ${formatPrice(order.total)}`}
+          </button>
+          {payment.error && (
+            <p role="alert" className="w-full text-sm text-accent-strong">
+              {payment.error}
+            </p>
+          )}
+        </div>
       )}
 
       <p className="mt-6 inline-flex items-start gap-2 text-ink">

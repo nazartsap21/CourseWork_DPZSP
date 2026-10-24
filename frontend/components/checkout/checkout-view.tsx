@@ -15,7 +15,7 @@ import { useQuote } from "@/lib/quotes";
 import { useDebounced } from "@/lib/use-debounced";
 import { useHydrated } from "@/lib/use-hydrated";
 import type { RestaurantDetails } from "@/types/catalog";
-import type { CheckoutPayload, DeliveryMethod, Order, Quote, QuotePayload } from "@/types/orders";
+import type { CheckoutPayload, DeliveryMethod, PlacedOrder, Quote, QuotePayload } from "@/types/orders";
 
 import type { MapPoint } from "./delivery-map";
 import { MethodSelector } from "./method-selector";
@@ -70,6 +70,8 @@ export function CheckoutView() {
   const [submitErrors, setSubmitErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // Set once the order exists and the browser is leaving for payment or the order page.
+  const [leaving, setLeaving] = useState<"payment" | "order" | null>(null);
 
   const { data: restaurant } = useSWR<RestaurantDetails, ApiError>(
     restaurantId ? `/restaurants/${restaurantId}` : null,
@@ -120,10 +122,17 @@ export function CheckoutView() {
       ...(isPickup ? {} : { delivery_address: address, delivery_note: note }),
     };
     try {
-      const order = await api.post<Order>("/orders", payload);
-      // Navigate first, then empty the cart, so the page doesn't flash "cart is empty".
-      router.push(`/orders/${order.id}`);
+      const order = await api.post<PlacedOrder>("/orders", payload);
+      // The order exists now, so the cart can go; `leaving` keeps this page from
+      // flashing "nothing to check out" while the browser navigates away.
+      setLeaving(order.payment_redirect_url ? "payment" : "order");
       clear();
+      if (order.payment_redirect_url) {
+        // Stripe Checkout is another site: full navigation, not a router push.
+        window.location.assign(order.payment_redirect_url);
+      } else {
+        router.push(`/orders/${order.id}`);
+      }
     } catch (error) {
       if (!(error instanceof ApiError)) throw error;
       if (error.details.length > 0) {
@@ -141,6 +150,17 @@ export function CheckoutView() {
 
   if (!hydrated) {
     return <CheckoutSkeleton />;
+  }
+
+  if (leaving) {
+    return (
+      <main className="mx-auto w-full max-w-xl flex-1 px-4 py-24 text-center" aria-busy>
+        <p className="font-serif text-3xl text-ink">
+          {leaving === "payment" ? "Taking you to payment…" : "Order placed"}
+        </p>
+        <p className="mt-3 text-muted-ink">Don&apos;t close this page.</p>
+      </main>
+    );
   }
 
   if (!cart.restaurant || cart.items.length === 0) {

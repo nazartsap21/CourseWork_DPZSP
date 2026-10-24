@@ -111,3 +111,8 @@ export interface Order {
   created_at: string;
   status_history: { status: OrderStatus; changed_at: string }[];
 }
+
+export interface PlacedOrder extends Order {
+  /** Where to send the customer to pay (Stripe or the mock success page); null for cash. */
+  payment_redirect_url: string | null;
+}

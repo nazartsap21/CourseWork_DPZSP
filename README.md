@@ -86,6 +86,18 @@ All seeded accounts use the password `forkful123`.
 
 The seed creates 10 restaurants in central Lviv across 8 cuisines, about 100 dishes, past orders with status history, reviews, favorites and loyalty points. Money is stored as integer kopiyky (1 UAH = 100).
 
+## Payments
+
+The app runs without any payment keys: when `STRIPE_SECRET_KEY` is empty, "Card online" uses a mock gateway that behaves like a successful card payment (it goes through the same success page and confirmation as Stripe).
+
+To use real Stripe test mode:
+
+1. Create a free account at https://dashboard.stripe.com and switch to **Test mode**.
+2. Copy the secret key (`sk_test_...`) from Developers → API keys into `backend/.env` as `STRIPE_SECRET_KEY`.
+3. Restart the backend and place an order with "Card online". Stripe Checkout opens; pay with the test card `4242 4242 4242 4242`, any future expiry date, any CVC.
+
+`FRONTEND_URL` (default `http://localhost:3000`) is where Stripe sends the customer back after paying. Cash orders are confirmed immediately and paid on delivery or at pickup.
+
 ## Default runtime note
 
 The backend code falls back to an SQLite database when `DATABASE_URL` is absent so the project can start cleanly in a minimal local environment. The repository still includes the PostgreSQL Docker Compose configuration that the full course project expects.

@@ -160,3 +160,16 @@ class OrderOut(BaseModel):
     estimated_delivery_minutes: int | None
     created_at: datetime
     status_history: list[StatusChangeOut]
+
+
+class PlacedOrderOut(OrderOut):
+    # Send the customer here to pay (Stripe or the mock success page); null for cash.
+    payment_redirect_url: str | None
+
+
+class PaymentConfirmIn(BaseModel):
+    session_id: str = Field(min_length=1, max_length=255)
+
+
+class PaymentSessionOut(BaseModel):
+    redirect_url: str

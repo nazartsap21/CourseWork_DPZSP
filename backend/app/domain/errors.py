@@ -35,5 +35,11 @@ class AuthenticationError(DomainError):
     code = "UNAUTHORIZED"
 
 
+class ExternalServiceError(DomainError):
+    """A third-party service (payment provider, routing API) failed."""
+
+    code = "EXTERNAL_SERVICE_ERROR"
+
+
 class PermissionDeniedError(DomainError):
     code = "FORBIDDEN"

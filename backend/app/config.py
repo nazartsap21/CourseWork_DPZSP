@@ -19,6 +19,10 @@ class BaseConfig:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     # Couriers deliver within this straight-line radius from the restaurant.
     DELIVERY_RADIUS_KM = float(os.getenv("DELIVERY_RADIUS_KM", "7"))
+    # Test-mode key (sk_test_...). Empty: card payments use the mock gateway.
+    STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
+    # Where payment providers send the customer back after paying.
+    FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
     JSON_SORT_KEYS = False
 
 

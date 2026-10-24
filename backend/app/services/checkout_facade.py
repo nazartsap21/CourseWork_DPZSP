@@ -2,8 +2,9 @@ from dataclasses import dataclass, replace
 
 from ..domain.orders.states import initial_state
 from ..domain.orders.validation import OrderValidationError
-from ..models import Order, PaymentMethod
+from ..models import Order
 from ..repositories import LoyaltyRepository, OrderRepository
+from .payment_service import PaymentService
 from .quote_service import OrderQuoteService, QuoteRequest
 
 
@@ -13,15 +14,22 @@ class CheckoutRequest:
     payment_method: str
 
 
+@dataclass(frozen=True)
+class CheckoutResult:
+    order: Order
+    # Where to send the customer to pay; None when nothing has to be paid now (cash).
+    payment_redirect_url: str | None
+
+
 class CheckoutFacade:
     """Facade: the single entry point for placing an order.
 
     Behind `place_order` several subsystems cooperate: `OrderBuilder` assembles
     the draft, the `OrderValidator` chain checks it, a `DeliveryStrategy` and the
     `PriceComponent` decorators price it (all via `OrderQuoteService`), the
-    `OrderState` decides the initial status, and repositories persist the order
-    and spend the points in one transaction. The API layer calls only this
-    method and knows none of those classes.
+    `PaymentGatewayFactory` picks a `PaymentGateway`, the `OrderState` decides the
+    initial status, and repositories persist the order, its payment and the
+    spent points in one transaction. The API layer calls only this method.
     """
 
     def __init__(
@@ -29,20 +37,25 @@ class CheckoutFacade:
         quotes: OrderQuoteService,
         orders: OrderRepository,
         loyalty: LoyaltyRepository,
+        payments: PaymentService,
     ) -> None:
         self._quotes = quotes
         self._orders = orders
         self._loyalty = loyalty
+        self._payments = payments
 
-    def place_order(self, request: CheckoutRequest, customer_id: int) -> Order:
+    def place_order(self, request: CheckoutRequest, customer_id: int) -> CheckoutResult:
+        # Resolve the gateway first: without a Stripe key "stripe" becomes the mock,
+        # and the order must record the provider that really takes the money.
+        gateway = self._payments.gateway_for(request.payment_method)
         quote = self._quotes.quote(
-            replace(request.quote, payment_method=request.payment_method), customer_id
+            replace(request.quote, payment_method=gateway.provider), customer_id
         )
         # The quote only reports broken rules; placing an order enforces them.
         if quote.validation_error is not None:
             raise quote.validation_error
 
-        state = initial_state(pays_online=request.payment_method != PaymentMethod.CASH)
+        state = initial_state(pays_online=gateway.is_online)
         try:
             order = self._orders.create_from_draft(
                 quote.draft,
@@ -52,11 +65,13 @@ class CheckoutFacade:
                 created_by_id=customer_id,
             )
             self._spend_points(customer_id, order)
+            # Inside the transaction: if the provider fails, no unpaid order is left behind.
+            redirect_url = self._payments.start(order, gateway)
             self._orders.commit()
         except Exception:
             self._orders.rollback()
             raise
-        return order
+        return CheckoutResult(order=order, payment_redirect_url=redirect_url)
 
     def _spend_points(self, customer_id: int, order: Order) -> None:
         if order.bonus_points_used == 0:
