@@ -7,6 +7,7 @@ from ..domain.payments.gateways import SESSION_ID_PLACEHOLDER, PaymentGateway, P
 from ..models import Order, OrderStatus, Payment, PaymentPurpose, PaymentStatus
 from ..models.base import utcnow
 from ..repositories import OrderRepository, PaymentRepository
+from .order_service import order_facts
 
 
 @dataclass(frozen=True)
@@ -113,7 +114,7 @@ class PaymentService:
             )
 
         # State pattern decides whether "paid" is a valid move from the current status.
-        next_state = state_for(order.status).pay()
+        next_state = state_for(order.status).pay(order_facts(order))
         payment.status = PaymentStatus.PAID
         payment.paid_at = utcnow()
         order.payment_status = PaymentStatus.PAID

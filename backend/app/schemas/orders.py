@@ -160,6 +160,12 @@ class OrderOut(BaseModel):
     estimated_delivery_minutes: int | None
     created_at: datetime
     status_history: list[StatusChangeOut]
+    # Statuses the current viewer may move the order to (buttons in staff UIs).
+    available_transitions: list[OrderStatus] = []
+
+
+class StatusChangeIn(BaseModel):
+    status: OrderStatus
 
 
 class PlacedOrderOut(OrderOut):

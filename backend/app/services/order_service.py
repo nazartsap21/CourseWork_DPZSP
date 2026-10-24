@@ -1,25 +1,102 @@
-from ..domain.errors import NotFoundError
-from ..models import Order, UserRole
+from ..domain.errors import BusinessRuleError, NotFoundError
+from ..domain.orders.permissions import Actor, OrderAccess, authorize, is_allowed
+from ..domain.orders.states import OrderFacts, state_for
+from ..models import DeliveryMethod, Order, OrderStatus, PaymentMethod, PaymentStatus, UserRole
+from ..models.base import utcnow
 from ..repositories import OrderRepository
+
+# Statuses staff can set through the API, and the State action behind each.
+# "accepted" comes only from payment confirmation, "cancelled" only from the
+# cancel command (it also refunds points and payments).
+ACTION_FOR_STATUS: dict[str, str] = {
+    OrderStatus.PREPARING: "start_preparing",
+    OrderStatus.READY_FOR_PICKUP: "mark_ready",
+    OrderStatus.DELIVERING: "pick_up",
+    OrderStatus.DELIVERED: "deliver",
+}
+
+
+def order_facts(order: Order) -> OrderFacts:
+    return OrderFacts(is_pickup=order.delivery_method == DeliveryMethod.PICKUP)
+
+
+def order_access(order: Order) -> OrderAccess:
+    return OrderAccess(
+        customer_id=order.customer_id,
+        courier_id=order.courier_id,
+        is_pickup=order.delivery_method == DeliveryMethod.PICKUP,
+    )
 
 
 class OrderService:
-    """Read access to orders with ownership rules. Status changes join it later."""
+    """Reading orders with ownership rules, and moving them through their
+    lifecycle: the `OrderState` decides if a move is possible, the permission
+    policy decides who may make it, the order records it."""
 
     def __init__(self, orders: OrderRepository) -> None:
         self._orders = orders
 
-    def get_order(self, order_id: int, user_id: int, role: str) -> Order:
+    def get_order(self, order_id: int, actor: Actor) -> Order:
         order = self._orders.get_with_details(order_id)
         # Someone else's order looks exactly like a missing one, so ids can't be probed.
-        if order is None or not self._can_view(order, user_id, role):
+        if order is None or not self._can_view(order, actor):
             raise NotFoundError("Order not found.", "ORDER_NOT_FOUND")
         return order
 
+    def available_transitions(self, order: Order, actor: Actor) -> list[str]:
+        """Statuses this actor can move the order to right now (for UI buttons)."""
+        access = order_access(order)
+        return [
+            next_state.status
+            for action, next_state in state_for(order.status)
+            .available_actions(order_facts(order))
+            .items()
+            if next_state.status in ACTION_FOR_STATUS and is_allowed(action, actor, access)
+        ]
+
+    def change_status(self, order_id: int, target: str, actor: Actor) -> Order:
+        action = ACTION_FOR_STATUS.get(target)
+        if action is None:
+            raise BusinessRuleError(
+                f"Status '{target}' can't be set directly.", "STATUS_NOT_SETTABLE", field="status"
+            )
+        # Locked so two staff members can't move the same order at once.
+        order = self._orders.get_with_details(order_id, for_update=True)
+        if order is None or not self._can_view(order, actor):
+            raise NotFoundError("Order not found.", "ORDER_NOT_FOUND")
+
+        authorize(action, actor, order_access(order))
+        next_state = state_for(order.status).apply(action, order_facts(order))
+
+        if action == "pick_up":
+            order.courier_id = actor.user_id
+            order.picked_up_at = utcnow()
+        if action == "deliver" and order.payment_method == PaymentMethod.CASH:
+            self._mark_cash_paid(order)
+        order.change_status(next_state.status, changed_by_id=actor.user_id)
+        self._orders.commit()
+        return order
+
     @staticmethod
-    def _can_view(order: Order, user_id: int, role: str) -> bool:
-        if role == UserRole.ADMIN:
+    def _mark_cash_paid(order: Order) -> None:
+        """Cash is collected when the order is handed over."""
+        now = utcnow()
+        order.payment_status = PaymentStatus.PAID
+        for payment in order.payments:
+            if payment.status == PaymentStatus.PENDING:
+                payment.status = PaymentStatus.PAID
+                payment.paid_at = now
+
+    @staticmethod
+    def _can_view(order: Order, actor: Actor) -> bool:
+        if actor.role == UserRole.ADMIN:
             return True
-        if role == UserRole.COURIER:
-            return order.courier_id == user_id
-        return order.customer_id == user_id
+        if actor.role == UserRole.COURIER:
+            # Couriers see their own orders and the ones waiting for any courier.
+            waiting_for_courier = (
+                order.courier_id is None
+                and order.status == OrderStatus.READY_FOR_PICKUP
+                and order.delivery_method != DeliveryMethod.PICKUP
+            )
+            return order.courier_id == actor.user_id or waiting_for_courier
+        return order.customer_id == actor.user_id

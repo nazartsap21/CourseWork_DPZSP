@@ -65,8 +65,9 @@ class OrderRepository(SqlAlchemyRepository):
         self._session.flush()
         return order
 
-    def get_with_details(self, order_id: int) -> Order | None:
-        return self._session.scalar(
+    def get_with_details(self, order_id: int, for_update: bool = False) -> Order | None:
+        """`for_update` locks the order row until commit (status changes)."""
+        stmt = (
             select(Order)
             .where(Order.id == order_id)
             .options(
@@ -75,3 +76,6 @@ class OrderRepository(SqlAlchemyRepository):
                 selectinload(Order.restaurant),
             )
         )
+        if for_update:
+            stmt = stmt.with_for_update(of=Order)
+        return self._session.scalar(stmt)

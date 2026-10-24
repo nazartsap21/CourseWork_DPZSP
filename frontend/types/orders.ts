@@ -110,6 +110,8 @@ export interface Order {
   estimated_delivery_minutes: number | null;
   created_at: string;
   status_history: { status: OrderStatus; changed_at: string }[];
+  /** Statuses the current viewer may move the order to (staff UIs). */
+  available_transitions: OrderStatus[];
 }
 
 export interface PlacedOrder extends Order {

@@ -5,16 +5,22 @@ which state each action leads to. An action that isn't allowed raises
 `InvalidTransitionError` (HTTP 409), so invalid moves like "deliver a
 cancelled order" are impossible by construction, not by scattered `if`s.
 
-States hold no per-order data, so one instance per status is shared
-(see `state_for`). The persisted `Order.status` string is the link between
-the database row and its state object.
+Transitions (action: from → to):
+    pay:             pending_payment → accepted
+    start_preparing: accepted → preparing
+    mark_ready:      preparing → ready_for_pickup
+    pick_up:         ready_for_pickup → delivering   (courier orders only)
+    deliver:         delivering → delivered,
+                     ready_for_pickup → delivered    (pickup orders skip delivering)
+    cancel:          pending_payment | accepted → cancelled
 
-Stage 9 implements what checkout needs: the initial state and the moves out
-of it. The rest of the flow (preparing → delivered) is filled in with the
-order status API.
+States hold no per-order data, so one instance per status is shared
+(`state_for`). Facts about the specific order that change the rules (pickup
+or courier) are passed in as `OrderFacts`.
 """
 
 from abc import ABC
+from dataclasses import dataclass
 
 from ..errors import ConflictError
 
@@ -23,29 +29,58 @@ class InvalidTransitionError(ConflictError):
     code = "INVALID_STATUS_TRANSITION"
 
 
+@dataclass(frozen=True)
+class OrderFacts:
+    """Per-order information some transitions depend on."""
+
+    is_pickup: bool
+
+
+# Every action an order can receive, in lifecycle order.
+ACTIONS = ("pay", "start_preparing", "mark_ready", "pick_up", "deliver", "cancel")
+
+
 class OrderState(ABC):
     """Base state: every action is refused unless a subclass allows it."""
 
     status: str
     label: str
 
-    def pay(self) -> "OrderState":
+    def pay(self, facts: OrderFacts) -> "OrderState":
         raise self._refuse("confirm payment for")
 
-    def start_preparing(self) -> "OrderState":
+    def start_preparing(self, facts: OrderFacts) -> "OrderState":
         raise self._refuse("start preparing")
 
-    def mark_ready(self) -> "OrderState":
+    def mark_ready(self, facts: OrderFacts) -> "OrderState":
         raise self._refuse("mark as ready")
 
-    def pick_up(self) -> "OrderState":
+    def pick_up(self, facts: OrderFacts) -> "OrderState":
         raise self._refuse("hand to a courier")
 
-    def deliver(self) -> "OrderState":
+    def deliver(self, facts: OrderFacts) -> "OrderState":
         raise self._refuse("mark as delivered")
 
-    def cancel(self) -> "OrderState":
+    def cancel(self, facts: OrderFacts) -> "OrderState":
         raise self._refuse("cancel")
+
+    def apply(self, action: str, facts: OrderFacts) -> "OrderState":
+        if action not in ACTIONS:
+            raise ValueError(f"Unknown order action: {action}")
+        return getattr(self, action)(facts)
+
+    def available_actions(self, facts: OrderFacts) -> dict[str, "OrderState"]:
+        """Action → resulting state, for every action this state allows.
+
+        Derived by trying each action, so the list can never disagree with
+        the transition methods themselves."""
+        available: dict[str, OrderState] = {}
+        for action in ACTIONS:
+            try:
+                available[action] = self.apply(action, facts)
+            except InvalidTransitionError:
+                continue
+        return available
 
     @property
     def is_final(self) -> bool:
@@ -59,10 +94,10 @@ class PendingPayment(OrderState):
     status = "pending_payment"
     label = "Waiting for payment"
 
-    def pay(self) -> OrderState:
+    def pay(self, facts: OrderFacts) -> OrderState:
         return ACCEPTED
 
-    def cancel(self) -> OrderState:
+    def cancel(self, facts: OrderFacts) -> OrderState:
         return CANCELLED
 
 
@@ -70,7 +105,10 @@ class Accepted(OrderState):
     status = "accepted"
     label = "Accepted"
 
-    def cancel(self) -> OrderState:
+    def start_preparing(self, facts: OrderFacts) -> OrderState:
+        return PREPARING
+
+    def cancel(self, facts: OrderFacts) -> OrderState:
         return CANCELLED
 
 
@@ -78,15 +116,36 @@ class Preparing(OrderState):
     status = "preparing"
     label = "Preparing"
 
+    def mark_ready(self, facts: OrderFacts) -> OrderState:
+        return READY_FOR_PICKUP
+
 
 class ReadyForPickup(OrderState):
+    """Waits for a courier, or for the customer if it's a pickup order."""
+
     status = "ready_for_pickup"
     label = "Ready for pickup"
+
+    def pick_up(self, facts: OrderFacts) -> OrderState:
+        if facts.is_pickup:
+            raise InvalidTransitionError(
+                "Pickup orders are collected by the customer, not a courier."
+            )
+        return DELIVERING
+
+    def deliver(self, facts: OrderFacts) -> OrderState:
+        # Pickup orders skip Delivering: handing the bag over completes them.
+        if not facts.is_pickup:
+            raise InvalidTransitionError("A courier must pick the order up before delivering it.")
+        return DELIVERED
 
 
 class Delivering(OrderState):
     status = "delivering"
     label = "On the way"
+
+    def deliver(self, facts: OrderFacts) -> OrderState:
+        return DELIVERED
 
 
 class Delivered(OrderState):

@@ -5,7 +5,8 @@ from flask_jwt_extended import get_jwt, jwt_required
 
 from ...container import get_services
 from ...domain.delivery.geo import GeoPoint
-from ...models import Order, UserRole
+from ...domain.orders.permissions import Actor
+from ...models import Order, OrderStatus, UserRole
 from ...schemas.orders import (
     CheckoutIn,
     DeliveryOut,
@@ -17,6 +18,7 @@ from ...schemas.orders import (
     QuotedItemOut,
     QuoteIn,
     QuoteOut,
+    StatusChangeIn,
     ValidationIssueOut,
 )
 from ...services.checkout_facade import CheckoutRequest
@@ -90,10 +92,6 @@ def _quote_request(body: QuoteIn) -> QuoteRequest:
     )
 
 
-def _order_out(order: Order) -> dict:
-    return OrderOut.model_validate(order).model_dump(mode="json")
-
-
 @orders_bp.post("/quote")
 @jwt_required(optional=True)
 def quote() -> Response:
@@ -132,11 +130,34 @@ def place_order() -> tuple[Response, int]:
     return jsonify(placed.model_dump(mode="json")), 201
 
 
+def _current_actor() -> Actor:
+    return Actor(user_id=current_user_id(), role=get_jwt()["role"])
+
+
+def _order_detail(order: Order, actor: Actor) -> dict:
+    detail = OrderOut.model_validate(order)
+    detail.available_transitions = [
+        OrderStatus(status) for status in get_services().orders.available_transitions(order, actor)
+    ]
+    return detail.model_dump(mode="json")
+
+
 @orders_bp.get("/<int:order_id>")
 @jwt_required()
 def get_order(order_id: int) -> Response:
-    order = get_services().orders.get_order(order_id, current_user_id(), get_jwt()["role"])
-    return jsonify(_order_out(order))
+    actor = _current_actor()
+    return jsonify(_order_detail(get_services().orders.get_order(order_id, actor), actor))
+
+
+@orders_bp.patch("/<int:order_id>/status")
+@roles_required(UserRole.ADMIN, UserRole.COURIER)
+def change_status(order_id: int) -> Response:
+    """Staff move an order along its lifecycle: the OrderState rejects impossible
+    moves (409), the permission policy rejects the wrong person (403)."""
+    body = parse_body(StatusChangeIn)
+    actor = _current_actor()
+    order = get_services().orders.change_status(order_id, body.status, actor)
+    return jsonify(_order_detail(order, actor))
 
 
 @orders_bp.post("/<int:order_id>/payment-session")
