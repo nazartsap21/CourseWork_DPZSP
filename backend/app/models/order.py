@@ -86,12 +86,10 @@ class Order(db.Model):
     payments: Mapped[list[Payment]] = relationship(back_populates="order")
     review: Mapped[Review | None] = relationship(back_populates="order")
 
-    def change_status(self, status: str, changed_by_id: int | None) -> None:
-        """Records a transition already approved by the order's `OrderState`."""
+    def change_status(self, status: str) -> None:
+        """Applies a transition already approved by the order's `OrderState`.
+        History is written by `StatusHistoryObserver` when the change is published."""
         self.status = OrderStatus(status)
-        self.status_history.append(
-            OrderStatusHistory(status=self.status, changed_by_id=changed_by_id)
-        )
 
 
 class OrderItem(db.Model):

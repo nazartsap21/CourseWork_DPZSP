@@ -1,9 +1,11 @@
 from dataclasses import dataclass, replace
 
+from ..domain.events.publisher import OrderEventPublisher
 from ..domain.orders.states import initial_state
 from ..domain.orders.validation import OrderValidationError
 from ..models import Order
 from ..repositories import LoyaltyRepository, OrderRepository
+from .order_events import publish_status
 from .payment_service import PaymentService
 from .quote_service import OrderQuoteService, QuoteRequest
 
@@ -28,8 +30,9 @@ class CheckoutFacade:
     the draft, the `OrderValidator` chain checks it, a `DeliveryStrategy` and the
     `PriceComponent` decorators price it (all via `OrderQuoteService`), the
     `PaymentGatewayFactory` picks a `PaymentGateway`, the `OrderState` decides the
-    initial status, and repositories persist the order, its payment and the
-    spent points in one transaction. The API layer calls only this method.
+    initial status, repositories persist the order, its payment and the spent
+    points, and the `OrderEventPublisher` tells observers, all in one
+    transaction. The API layer calls only this method.
     """
 
     def __init__(
@@ -38,11 +41,13 @@ class CheckoutFacade:
         orders: OrderRepository,
         loyalty: LoyaltyRepository,
         payments: PaymentService,
+        events: OrderEventPublisher,
     ) -> None:
         self._quotes = quotes
         self._orders = orders
         self._loyalty = loyalty
         self._payments = payments
+        self._events = events
 
     def place_order(self, request: CheckoutRequest, customer_id: int) -> CheckoutResult:
         # Resolve the gateway first: without a Stripe key "stripe" becomes the mock,
@@ -62,8 +67,9 @@ class CheckoutFacade:
                 quote.price,
                 status=state.status,
                 estimated_delivery_minutes=quote.delivery.eta_minutes_max,
-                created_by_id=customer_id,
             )
+            # Observers write the first history row and the "accepted" notification.
+            publish_status(self._events, order, old_status=None, changed_by_id=customer_id)
             self._spend_points(customer_id, order)
             # Inside the transaction: if the provider fails, no unpaid order is left behind.
             redirect_url = self._payments.start(order, gateway)

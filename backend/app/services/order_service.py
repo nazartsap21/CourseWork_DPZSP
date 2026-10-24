@@ -1,9 +1,11 @@
 from ..domain.errors import BusinessRuleError, NotFoundError
+from ..domain.events.publisher import OrderEventPublisher
 from ..domain.orders.permissions import Actor, OrderAccess, authorize, is_allowed
 from ..domain.orders.states import OrderFacts, state_for
 from ..models import DeliveryMethod, Order, OrderStatus, PaymentMethod, PaymentStatus, UserRole
 from ..models.base import utcnow
 from ..repositories import OrderRepository
+from .order_events import transition
 
 # Statuses staff can set through the API, and the State action behind each.
 # "accepted" comes only from payment confirmation, "cancelled" only from the
@@ -31,10 +33,11 @@ def order_access(order: Order) -> OrderAccess:
 class OrderService:
     """Reading orders with ownership rules, and moving them through their
     lifecycle: the `OrderState` decides if a move is possible, the permission
-    policy decides who may make it, the order records it."""
+    policy decides who may make it, and the change is published to observers."""
 
-    def __init__(self, orders: OrderRepository) -> None:
+    def __init__(self, orders: OrderRepository, events: OrderEventPublisher) -> None:
         self._orders = orders
+        self._events = events
 
     def get_order(self, order_id: int, actor: Actor) -> Order:
         order = self._orders.get_with_details(order_id)
@@ -73,7 +76,7 @@ class OrderService:
             order.picked_up_at = utcnow()
         if action == "deliver" and order.payment_method == PaymentMethod.CASH:
             self._mark_cash_paid(order)
-        order.change_status(next_state.status, changed_by_id=actor.user_id)
+        transition(self._events, order, next_state.status, changed_by_id=actor.user_id)
         self._orders.commit()
         return order
 

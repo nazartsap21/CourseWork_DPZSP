@@ -8,7 +8,6 @@ from ..models import (
     Order,
     OrderItem,
     OrderStatus,
-    OrderStatusHistory,
     PaymentMethod,
     PaymentStatus,
 )
@@ -22,7 +21,6 @@ class OrderRepository(SqlAlchemyRepository):
         price: PriceBreakdown,
         status: str,
         estimated_delivery_minutes: int,
-        created_by_id: int,
     ) -> Order:
         """The persistence boundary: turns the domain draft into ORM rows.
 
@@ -56,9 +54,6 @@ class OrderRepository(SqlAlchemyRepository):
                     quantity=item.quantity,
                 )
                 for item in draft.items
-            ],
-            status_history=[
-                OrderStatusHistory(status=OrderStatus(status), changed_by_id=created_by_id)
             ],
         )
         self._session.add(order)

@@ -15,6 +15,8 @@ from .domain.delivery.strategies import (
     PickupDelivery,
     StandardDelivery,
 )
+from .domain.events.observers import NotificationObserver, StatusHistoryObserver
+from .domain.events.publisher import OrderEventPublisher
 from .domain.orders.validation import build_order_validation_chain
 from .domain.payments.factory import PaymentGatewayFactory
 from .domain.payments.stripe_adapter import StripeGateway
@@ -23,14 +25,17 @@ from .repositories import (
     CuisineRepository,
     DishRepository,
     LoyaltyRepository,
+    NotificationRepository,
     OrderRepository,
     PaymentRepository,
     RestaurantRepository,
+    StatusHistoryRepository,
     UserRepository,
 )
 from .services.auth_service import AuthService
 from .services.catalog_service import CatalogService
 from .services.checkout_facade import CheckoutFacade
+from .services.notification_service import NotificationService
 from .services.order_service import OrderService
 from .services.payment_service import PaymentService, ReturnUrls
 from .services.quote_service import OrderQuoteService
@@ -46,10 +51,20 @@ class Services:
     checkout: CheckoutFacade
     orders: OrderService
     payments: PaymentService
+    notifications: NotificationService
+
+
+def register_order_observers(publisher: OrderEventPublisher) -> None:
+    """Subscribes every observer once. Called from the app factory; `reset()`
+    first, so creating the app again doesn't register duplicates."""
+    publisher.reset()
+    publisher.subscribe(StatusHistoryObserver(StatusHistoryRepository(db.session)))
+    publisher.subscribe(NotificationObserver(NotificationRepository(db.session)))
 
 
 def build_services(config: Config) -> Services:
     session = db.session
+    events = OrderEventPublisher.instance()
     restaurants = RestaurantRepository(session)
     dishes = DishRepository(session)
     delivery_strategies = DeliveryStrategyResolver(
@@ -76,14 +91,16 @@ def build_services(config: Config) -> Services:
         PaymentRepository(session),
         orders,
         ReturnUrls.for_frontend(config["FRONTEND_URL"]),
+        events,
     )
     return Services(
         auth=AuthService(UserRepository(session)),
         catalog=CatalogService(restaurants, dishes, CuisineRepository(session)),
         quotes=quotes,
-        checkout=CheckoutFacade(quotes, orders, loyalty, payments),
-        orders=OrderService(orders),
+        checkout=CheckoutFacade(quotes, orders, loyalty, payments, events),
+        orders=OrderService(orders, events),
         payments=payments,
+        notifications=NotificationService(NotificationRepository(session)),
     )
 
 

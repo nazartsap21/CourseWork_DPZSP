@@ -1,12 +1,14 @@
 from dataclasses import dataclass
 
 from ..domain.errors import BusinessRuleError, NotFoundError
+from ..domain.events.publisher import OrderEventPublisher
 from ..domain.orders.states import state_for
 from ..domain.payments.factory import PaymentGatewayFactory
 from ..domain.payments.gateways import SESSION_ID_PLACEHOLDER, PaymentGateway, PaymentRequest
 from ..models import Order, OrderStatus, Payment, PaymentPurpose, PaymentStatus
 from ..models.base import utcnow
 from ..repositories import OrderRepository, PaymentRepository
+from .order_events import transition
 from .order_service import order_facts
 
 
@@ -37,11 +39,13 @@ class PaymentService:
         payments: PaymentRepository,
         orders: OrderRepository,
         return_urls: ReturnUrls,
+        events: OrderEventPublisher,
     ) -> None:
         self._gateways = gateways
         self._payments = payments
         self._orders = orders
         self._return_urls = return_urls
+        self._events = events
 
     def gateway_for(self, payment_method: str) -> PaymentGateway:
         return self._gateways.for_method(payment_method)
@@ -118,6 +122,6 @@ class PaymentService:
         payment.status = PaymentStatus.PAID
         payment.paid_at = utcnow()
         order.payment_status = PaymentStatus.PAID
-        order.change_status(next_state.status, changed_by_id=None)
+        transition(self._events, order, next_state.status, changed_by_id=None)
         self._payments.commit()
         return order

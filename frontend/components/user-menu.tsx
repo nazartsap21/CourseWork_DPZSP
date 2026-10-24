@@ -3,9 +3,10 @@
 import { ChevronDown, LogOut, UserRound } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import { useAuth } from "@/lib/auth";
+import { useDismiss } from "@/lib/use-dismiss";
 import type { User } from "@/types/api";
 
 const ROLE_LABEL: Record<User["role"], string> = {
@@ -27,22 +28,10 @@ export function UserMenu({ user }: { user: User }) {
   const { logout } = useAuth();
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const closeMenu = useCallback(() => setOpen(false), []);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    const close = (event: MouseEvent | KeyboardEvent) => {
-      if (event instanceof KeyboardEvent ? event.key === "Escape" : !containerRef.current?.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", close);
-    document.addEventListener("keydown", close);
-    return () => {
-      document.removeEventListener("mousedown", close);
-      document.removeEventListener("keydown", close);
-    };
-  }, [open]);
+  useDismiss(containerRef, open, closeMenu);
 
   const signOut = () => {
     setOpen(false);

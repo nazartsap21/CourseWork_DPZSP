@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import { useCart } from "@/lib/cart";
 
+import { NotificationBell } from "./notification-bell";
 import { UserMenu } from "./user-menu";
 
 const ROLE_LINKS = {
@@ -67,6 +68,7 @@ export function SiteHeader() {
             </>
           )}
 
+          {user && <NotificationBell canOpenOrders={user.role === "customer"} />}
           {user && <UserMenu user={user} />}
         </nav>
       </div>

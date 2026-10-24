@@ -7,8 +7,10 @@ from .catalog_repository import (
     RestaurantStats,
 )
 from .loyalty_repository import LoyaltyRepository
+from .notification_repository import NotificationRepository
 from .order_repository import OrderRepository
 from .payment_repository import PaymentRepository
+from .status_history_repository import StatusHistoryRepository
 from .user_repository import UserRepository
 
 __all__ = [
@@ -16,11 +18,13 @@ __all__ = [
     "CuisineWithCount",
     "DishRepository",
     "LoyaltyRepository",
+    "NotificationRepository",
     "OrderRepository",
     "PaymentRepository",
     "PageResult",
     "RestaurantRepository",
     "RestaurantStats",
     "SqlAlchemyRepository",
+    "StatusHistoryRepository",
     "UserRepository",
 ]
