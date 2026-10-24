@@ -64,6 +64,7 @@ def _quote_out(quote: Quote) -> QuoteOut:
             points_balance=quote.loyalty.points_balance,
             max_redeemable_points=quote.max_redeemable_points,
         ),
+        delivery_radius_km=quote.delivery_radius_km,
         validation_error=ValidationIssueOut(
             code=error.code, message=error.message, field=error.field
         )

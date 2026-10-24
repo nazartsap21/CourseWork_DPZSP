@@ -84,6 +84,8 @@ class QuoteOut(BaseModel):
     bonus_points_used: int
     total: int
     loyalty: LoyaltyOut
+    # Courier delivery zone around the restaurant, for drawing it on the map.
+    delivery_radius_km: float
     # First broken order rule (minimum order, zone, ...); null when the order can be placed.
     validation_error: ValidationIssueOut | None
 

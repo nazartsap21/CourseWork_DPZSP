@@ -51,6 +51,7 @@ class Quote:
     price: PriceBreakdown
     loyalty: LoyaltyStatus
     max_redeemable_points: int
+    delivery_radius_km: float
     # First broken business rule, if any. A quote is still priced so the
     # checkout can show the numbers next to the problem.
     validation_error: OrderValidationError | None
@@ -156,6 +157,7 @@ class OrderQuoteService:
             price=price,
             loyalty=status,
             max_redeemable_points=max_points,
+            delivery_radius_km=self._delivery_radius_km,
             validation_error=validation_error,
         )
 

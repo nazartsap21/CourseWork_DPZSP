@@ -54,3 +54,31 @@ h5,
 h6 {
   font-family: var(--font-fraunces), Georgia, serif;
 }
+
+/* Leaflet map shapes (react-leaflet pathOptions.className); theme tokens only. */
+.map-zone {
+  stroke: var(--sage);
+  stroke-width: 1.5;
+  stroke-dasharray: 6 6;
+  fill: var(--sage);
+  fill-opacity: 0.06;
+}
+
+.map-restaurant {
+  stroke: var(--card);
+  stroke-width: 3;
+  fill: var(--accent);
+  fill-opacity: 1;
+}
+
+.map-destination {
+  stroke: var(--card);
+  stroke-width: 3;
+  fill: var(--ink);
+  fill-opacity: 1;
+}
+
+.leaflet-container {
+  font-family: inherit;
+  background: var(--surface);
+}
