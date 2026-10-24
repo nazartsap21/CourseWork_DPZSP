@@ -9,6 +9,11 @@ from dataclasses import dataclass
 import stripe
 from flask import Config, current_app
 
+from .domain.delivery.routing import (
+    FallbackRouteProvider,
+    OsrmRouteProvider,
+    StraightLineRouteProvider,
+)
 from .domain.delivery.strategies import (
     DeliveryStrategyResolver,
     ExpressDelivery,
@@ -35,6 +40,7 @@ from .repositories import (
 from .services.auth_service import AuthService
 from .services.catalog_service import CatalogService
 from .services.checkout_facade import CheckoutFacade
+from .services.courier_service import CourierService
 from .services.notification_service import NotificationService
 from .services.order_service import OrderService
 from .services.payment_service import PaymentService, ReturnUrls
@@ -52,6 +58,7 @@ class Services:
     orders: OrderService
     payments: PaymentService
     notifications: NotificationService
+    courier: CourierService
 
 
 def register_order_observers(publisher: OrderEventPublisher) -> None:
@@ -80,6 +87,10 @@ def build_services(config: Config) -> Services:
         validation_chain=build_order_validation_chain(),
         delivery_radius_km=config["DELIVERY_RADIUS_KM"],
     )
+    # Adapter + fallback: a slow or unreachable OSRM never blocks a pick-up.
+    routes = FallbackRouteProvider(
+        OsrmRouteProvider(config["OSRM_BASE_URL"]), StraightLineRouteProvider()
+    )
     stripe_key = config["STRIPE_SECRET_KEY"]
     gateways = PaymentGatewayFactory(
         stripe_gateway=(lambda: StripeGateway(stripe.StripeClient(stripe_key)))
@@ -98,9 +109,10 @@ def build_services(config: Config) -> Services:
         catalog=CatalogService(restaurants, dishes, CuisineRepository(session)),
         quotes=quotes,
         checkout=CheckoutFacade(quotes, orders, loyalty, payments, events),
-        orders=OrderService(orders, events),
+        orders=OrderService(orders, events, routes),
         payments=payments,
         notifications=NotificationService(NotificationRepository(session)),
+        courier=CourierService(orders),
     )
 
 

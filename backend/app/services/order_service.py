@@ -1,3 +1,10 @@
+from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import UTC, datetime
+
+from ..domain.delivery.geo import GeoPoint
+from ..domain.delivery.routing import RouteProvider
+from ..domain.delivery.tracking import CourierPosition, courier_position
 from ..domain.errors import BusinessRuleError, NotFoundError
 from ..domain.events.publisher import OrderEventPublisher
 from ..domain.orders.permissions import Actor, OrderAccess, authorize, is_allowed
@@ -30,14 +37,35 @@ def order_access(order: Order) -> OrderAccess:
     )
 
 
+@dataclass(frozen=True)
+class Tracking:
+    order: Order
+    route: list[GeoPoint]
+    # Only while the courier is on the way.
+    courier: CourierPosition | None
+
+
+def _as_utc(value: datetime) -> datetime:
+    # SQLite returns naive datetimes; values are always stored in UTC.
+    return value if value.tzinfo else value.replace(tzinfo=UTC)
+
+
 class OrderService:
     """Reading orders with ownership rules, and moving them through their
     lifecycle: the `OrderState` decides if a move is possible, the permission
     policy decides who may make it, and the change is published to observers."""
 
-    def __init__(self, orders: OrderRepository, events: OrderEventPublisher) -> None:
+    def __init__(
+        self,
+        orders: OrderRepository,
+        events: OrderEventPublisher,
+        routes: RouteProvider,
+        clock: Callable[[], datetime] = utcnow,
+    ) -> None:
         self._orders = orders
         self._events = events
+        self._routes = routes
+        self._clock = clock
 
     def get_order(self, order_id: int, actor: Actor) -> Order:
         order = self._orders.get_with_details(order_id)
@@ -72,13 +100,33 @@ class OrderService:
         next_state = state_for(order.status).apply(action, order_facts(order))
 
         if action == "pick_up":
-            order.courier_id = actor.user_id
-            order.picked_up_at = utcnow()
+            self._start_ride(order)
         if action == "deliver" and order.payment_method == PaymentMethod.CASH:
             self._mark_cash_paid(order)
         transition(self._events, order, next_state.status, changed_by_id=actor.user_id)
         self._orders.commit()
         return order
+
+    def tracking(self, order_id: int, actor: Actor) -> Tracking:
+        """Route and simulated courier position, recomputed on every request."""
+        order = self.get_order(order_id, actor)
+        route = [GeoPoint(lat, lng) for lat, lng in order.route or []]
+        courier = None
+        if order.status == OrderStatus.DELIVERING and route and order.picked_up_at:
+            courier = courier_position(route, _as_utc(order.picked_up_at), self._clock())
+        return Tracking(order=order, route=route, courier=courier)
+
+    def _start_ride(self, order: Order) -> None:
+        """Stores the road route (OSRM, or a straight line if it's unavailable)
+        and the pick-up time; positions are interpolated from these later."""
+        if order.delivery_lat is None or order.delivery_lng is None:
+            raise BusinessRuleError("This order has no delivery point.", "DELIVERY_POINT_MISSING")
+        route = self._routes.route(
+            GeoPoint(order.restaurant.lat, order.restaurant.lng),
+            GeoPoint(order.delivery_lat, order.delivery_lng),
+        )
+        order.route = [[point.lat, point.lng] for point in route.points]
+        order.picked_up_at = self._clock()
 
     @staticmethod
     def _mark_cash_paid(order: Order) -> None:

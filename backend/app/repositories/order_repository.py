@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import Select, select
 from sqlalchemy.orm import selectinload
 
 from ..domain.orders.builder import OrderDraft
@@ -74,3 +74,37 @@ class OrderRepository(SqlAlchemyRepository):
         if for_update:
             stmt = stmt.with_for_update(of=Order)
         return self._session.scalar(stmt)
+
+    def _with_courier_details(self) -> Select[tuple[Order]]:
+        return select(Order).options(
+            selectinload(Order.items),
+            selectinload(Order.restaurant),
+            selectinload(Order.customer),
+        )
+
+    def list_waiting_for_courier(self) -> list[Order]:
+        """Courier orders that are ready and not taken yet, oldest first."""
+        return list(
+            self._session.scalars(
+                self._with_courier_details()
+                .where(
+                    Order.status == OrderStatus.READY_FOR_PICKUP,
+                    Order.courier_id.is_(None),
+                    Order.delivery_method != DeliveryMethod.PICKUP,
+                )
+                .order_by(Order.updated_at)
+            )
+        )
+
+    def list_active_for_courier(self, courier_id: int) -> list[Order]:
+        """Orders the courier has taken and not delivered yet."""
+        return list(
+            self._session.scalars(
+                self._with_courier_details()
+                .where(
+                    Order.courier_id == courier_id,
+                    Order.status.in_([OrderStatus.READY_FOR_PICKUP, OrderStatus.DELIVERING]),
+                )
+                .order_by(Order.created_at)
+            )
+        )

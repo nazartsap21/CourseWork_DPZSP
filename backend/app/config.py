@@ -23,6 +23,8 @@ class BaseConfig:
     STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
     # Where payment providers send the customer back after paying.
     FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+    # Road routes for couriers; falls back to a straight line if unreachable.
+    OSRM_BASE_URL = os.getenv("OSRM_BASE_URL", "https://router.project-osrm.org")
     JSON_SORT_KEYS = False
 
 

@@ -35,8 +35,8 @@ def is_allowed(action: str, actor: Actor, order: OrderAccess) -> bool:
         # The admin acts as restaurant staff.
         return actor.role == ADMIN
     if action == "pick_up":
-        # A free courier may take an order; once taken, only that courier.
-        return actor.role == COURIER and order.courier_id in (None, actor.user_id)
+        # The courier must have taken the order first (assignment is a separate step).
+        return actor.role == COURIER and order.courier_id == actor.user_id
     if action == "deliver":
         if order.is_pickup:
             return actor.role == ADMIN

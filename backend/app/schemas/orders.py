@@ -164,6 +164,56 @@ class OrderOut(BaseModel):
     available_transitions: list[OrderStatus] = []
 
 
+class CustomerContactOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    name: str
+    phone: str | None
+
+
+class CourierOrderOut(BaseModel):
+    """What a courier needs on a delivery card. `total` is kopiyky; for cash orders
+    it's the amount to collect. `customer` is shown only to the assigned courier."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    status: OrderStatus
+    restaurant: OrderRestaurantOut
+    items: list[OrderItemOut]
+    delivery_address: str | None
+    delivery_note: str | None
+    delivery_lat: float | None
+    delivery_lng: float | None
+    total: int
+    payment_method: PaymentMethod
+    payment_status: PaymentStatus
+    created_at: datetime
+    customer: CustomerContactOut | None = None
+    available_transitions: list[OrderStatus] = []
+
+
+class PointOut(BaseModel):
+    lat: float
+    lng: float
+
+
+class CourierPositionOut(PointOut):
+    progress: float
+    minutes_left: int
+
+
+class TrackingOut(BaseModel):
+    order_id: int
+    status: OrderStatus
+    delivery_method: DeliveryMethod
+    restaurant: PointOut
+    destination: PointOut | None
+    # Road route as [lat, lng] pairs; empty until the courier picks the order up.
+    route: list[tuple[float, float]]
+    courier: CourierPositionOut | None
+
+
 class StatusChangeIn(BaseModel):
     status: OrderStatus
 

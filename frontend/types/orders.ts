@@ -118,3 +118,38 @@ export interface PlacedOrder extends Order {
   /** Where to send the customer to pay (Stripe or the mock success page); null for cash. */
   payment_redirect_url: string | null;
 }
+
+export interface CourierOrder {
+  id: number;
+  status: OrderStatus;
+  restaurant: Order["restaurant"];
+  items: OrderItem[];
+  delivery_address: string | null;
+  delivery_note: string | null;
+  delivery_lat: number | null;
+  delivery_lng: number | null;
+  /** For cash orders: the amount to collect. */
+  total: number;
+  payment_method: PaymentMethod;
+  payment_status: PaymentStatus;
+  created_at: string;
+  /** Only for the courier the order is assigned to. */
+  customer: { name: string; phone: string | null } | null;
+  available_transitions: OrderStatus[];
+}
+
+export interface LatLng {
+  lat: number;
+  lng: number;
+}
+
+export interface Tracking {
+  order_id: number;
+  status: OrderStatus;
+  delivery_method: DeliveryMethod;
+  restaurant: LatLng;
+  destination: LatLng | null;
+  /** [lat, lng] pairs; empty until the courier picks the order up. */
+  route: [number, number][];
+  courier: (LatLng & { progress: number; minutes_left: number }) | null;
+}

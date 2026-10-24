@@ -82,3 +82,17 @@ h6 {
   font-family: inherit;
   background: var(--surface);
 }
+
+.map-route {
+  stroke: var(--accent);
+  stroke-width: 4;
+  stroke-opacity: 0.85;
+  fill: none;
+}
+
+.map-courier {
+  stroke: var(--card);
+  stroke-width: 3;
+  fill: var(--sage);
+  fill-opacity: 1;
+}

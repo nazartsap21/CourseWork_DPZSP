@@ -19,6 +19,7 @@ from ...schemas.orders import (
     QuoteIn,
     QuoteOut,
     StatusChangeIn,
+    TrackingOut,
     ValidationIssueOut,
 )
 from ...services.checkout_facade import CheckoutRequest
@@ -166,3 +167,30 @@ def restart_payment(order_id: int) -> tuple[Response, int]:
     """Another payment attempt for an order still waiting for payment."""
     redirect_url = get_services().payments.restart(order_id, current_user_id())
     return jsonify(PaymentSessionOut(redirect_url=redirect_url).model_dump()), 201
+
+
+@orders_bp.get("/<int:order_id>/tracking")
+@jwt_required()
+def tracking(order_id: int) -> Response:
+    """Route and the simulated courier position; the tracking page polls this."""
+    result = get_services().orders.tracking(order_id, _current_actor())
+    order, courier = result.order, result.courier
+    out = TrackingOut(
+        order_id=order.id,
+        status=order.status,
+        delivery_method=order.delivery_method,
+        restaurant={"lat": order.restaurant.lat, "lng": order.restaurant.lng},
+        destination={"lat": order.delivery_lat, "lng": order.delivery_lng}
+        if order.delivery_lat is not None and order.delivery_lng is not None
+        else None,
+        route=[(p.lat, p.lng) for p in result.route],
+        courier={
+            "lat": courier.point.lat,
+            "lng": courier.point.lng,
+            "progress": round(courier.progress, 3),
+            "minutes_left": courier.minutes_left,
+        }
+        if courier
+        else None,
+    )
+    return jsonify(out.model_dump(mode="json"))
