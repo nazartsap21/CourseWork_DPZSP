@@ -1,8 +1,9 @@
+from datetime import datetime
 from typing import Self
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
-from ..models import DeliveryMethod
+from ..models import DeliveryMethod, OrderStatus, PaymentMethod, PaymentStatus
 
 MAX_ITEM_QUANTITY = 20
 MAX_DISTINCT_ITEMS = 50
@@ -85,3 +86,75 @@ class QuoteOut(BaseModel):
     loyalty: LoyaltyOut
     # First broken order rule (minimum order, zone, ...); null when the order can be placed.
     validation_error: ValidationIssueOut | None
+
+
+class CheckoutIn(QuoteIn):
+    payment_method: PaymentMethod
+    # Validated even when omitted, so a missing address is reported on this field.
+    delivery_address: str | None = Field(default=None, max_length=255, validate_default=True)
+    delivery_note: str | None = Field(default=None, max_length=255)
+
+    @field_validator("delivery_note")
+    @classmethod
+    def blank_note_is_none(cls, value: str | None) -> str | None:
+        return (value or "").strip() or None
+
+    @field_validator("delivery_address")
+    @classmethod
+    def courier_needs_address(cls, value: str | None, info: ValidationInfo) -> str | None:
+        value = (value or "").strip() or None
+        if value is None and info.data.get("delivery_method") not in (None, DeliveryMethod.PICKUP):
+            raise ValueError("Enter the street and building for the courier.")
+        return value
+
+
+class OrderItemOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    dish_id: int | None
+    name: str
+    price: int
+    quantity: int
+
+
+class StatusChangeOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    status: OrderStatus
+    changed_at: datetime
+
+
+class OrderRestaurantOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    address: str
+    lat: float
+    lng: float
+
+
+class OrderOut(BaseModel):
+    """Money fields are integer kopiyky."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    status: OrderStatus
+    restaurant: OrderRestaurantOut
+    items: list[OrderItemOut]
+    delivery_method: DeliveryMethod
+    delivery_address: str | None
+    delivery_note: str | None
+    delivery_lat: float | None
+    delivery_lng: float | None
+    subtotal: int
+    delivery_fee: int
+    discount: int
+    bonus_points_used: int
+    total: int
+    payment_method: PaymentMethod
+    payment_status: PaymentStatus
+    estimated_delivery_minutes: int | None
+    created_at: datetime
+    status_history: list[StatusChangeOut]

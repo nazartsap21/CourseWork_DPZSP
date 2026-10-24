@@ -38,6 +38,10 @@ class QuoteRequest:
     delivery_method: str
     destination: GeoPoint | None = None
     bonus_points: int = 0
+    # Only needed when the quote is turned into a real order at checkout.
+    delivery_address: str | None = None
+    delivery_note: str | None = None
+    payment_method: str | None = None
 
 
 @dataclass(frozen=True)
@@ -175,11 +179,15 @@ class OrderQuoteService:
         builder = OrderBuilder(customer_id).for_restaurant(_restaurant_snapshot(restaurant))
         for item in request.items:
             builder.add_item(_dish_snapshot(dishes[item.dish_id]), item.quantity)
-        return (
-            builder.with_delivery(request.delivery_method, request.destination)
-            .redeem_points(request.bonus_points)
-            .build()
-        )
+        builder.with_delivery(
+            request.delivery_method,
+            request.destination,
+            request.delivery_address,
+            request.delivery_note,
+        ).redeem_points(request.bonus_points)
+        if request.payment_method is not None:
+            builder.with_payment(request.payment_method)
+        return builder.build()
 
     def _loyalty_status(self, account: LoyaltyAccount | None, rules: LoyaltyRules) -> LoyaltyStatus:
         if account is None:

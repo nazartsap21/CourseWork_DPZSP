@@ -20,11 +20,14 @@ from .repositories import (
     CuisineRepository,
     DishRepository,
     LoyaltyRepository,
+    OrderRepository,
     RestaurantRepository,
     UserRepository,
 )
 from .services.auth_service import AuthService
 from .services.catalog_service import CatalogService
+from .services.checkout_facade import CheckoutFacade
+from .services.order_service import OrderService
 from .services.quote_service import OrderQuoteService
 
 EXTENSION_KEY = "forkful_services"
@@ -35,6 +38,8 @@ class Services:
     auth: AuthService
     catalog: CatalogService
     quotes: OrderQuoteService
+    checkout: CheckoutFacade
+    orders: OrderService
 
 
 def build_services(config: Config) -> Services:
@@ -44,17 +49,22 @@ def build_services(config: Config) -> Services:
     delivery_strategies = DeliveryStrategyResolver(
         [StandardDelivery(), ExpressDelivery(), PickupDelivery()]
     )
+    loyalty = LoyaltyRepository(session)
+    orders = OrderRepository(session)
+    quotes = OrderQuoteService(
+        restaurants,
+        dishes,
+        loyalty,
+        delivery_strategies,
+        validation_chain=build_order_validation_chain(),
+        delivery_radius_km=config["DELIVERY_RADIUS_KM"],
+    )
     return Services(
         auth=AuthService(UserRepository(session)),
         catalog=CatalogService(restaurants, dishes, CuisineRepository(session)),
-        quotes=OrderQuoteService(
-            restaurants,
-            dishes,
-            LoyaltyRepository(session),
-            delivery_strategies,
-            validation_chain=build_order_validation_chain(),
-            delivery_radius_km=config["DELIVERY_RADIUS_KM"],
-        ),
+        quotes=quotes,
+        checkout=CheckoutFacade(quotes, orders, loyalty),
+        orders=OrderService(orders),
     )
 
 

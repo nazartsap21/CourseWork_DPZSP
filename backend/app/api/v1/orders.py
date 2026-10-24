@@ -1,20 +1,25 @@
+from dataclasses import replace
+
 from flask import Blueprint, Response, jsonify
 from flask_jwt_extended import get_jwt, jwt_required
 
 from ...container import get_services
 from ...domain.delivery.geo import GeoPoint
-from ...models import UserRole
+from ...models import Order, UserRole
 from ...schemas.orders import (
+    CheckoutIn,
     DeliveryOut,
     LoyaltyOut,
+    OrderOut,
     PriceLineOut,
     QuotedItemOut,
     QuoteIn,
     QuoteOut,
     ValidationIssueOut,
 )
+from ...services.checkout_facade import CheckoutRequest
 from ...services.quote_service import Quote, QuoteItemRequest, QuoteRequest
-from ..security import current_user_id
+from ..security import current_user_id, roles_required
 from ..validation import parse_body
 
 orders_bp = Blueprint("orders", __name__, url_prefix="/orders")
@@ -67,6 +72,25 @@ def _quote_out(quote: Quote) -> QuoteOut:
     )
 
 
+def _quote_request(body: QuoteIn) -> QuoteRequest:
+    destination = (
+        GeoPoint(body.delivery_lat, body.delivery_lng)
+        if body.delivery_lat is not None and body.delivery_lng is not None
+        else None
+    )
+    return QuoteRequest(
+        restaurant_id=body.restaurant_id,
+        items=[QuoteItemRequest(i.dish_id, i.quantity) for i in body.items],
+        delivery_method=body.delivery_method,
+        destination=destination,
+        bonus_points=body.bonus_points,
+    )
+
+
+def _order_out(order: Order) -> dict:
+    return OrderOut.model_validate(order).model_dump(mode="json")
+
+
 @orders_bp.post("/quote")
 @jwt_required(optional=True)
 def quote() -> Response:
@@ -75,19 +99,31 @@ def quote() -> Response:
     `validation_error` (status 200) so the checkout can show them next to the price."""
     body = parse_body(QuoteIn)
     is_customer = get_jwt().get("role") == UserRole.CUSTOMER
-    destination = (
-        GeoPoint(body.delivery_lat, body.delivery_lng)
-        if body.delivery_lat is not None and body.delivery_lng is not None
-        else None
-    )
     result = get_services().quotes.quote(
-        QuoteRequest(
-            restaurant_id=body.restaurant_id,
-            items=[QuoteItemRequest(i.dish_id, i.quantity) for i in body.items],
-            delivery_method=body.delivery_method,
-            destination=destination,
-            bonus_points=body.bonus_points,
-        ),
-        customer_id=current_user_id() if is_customer else None,
+        _quote_request(body), customer_id=current_user_id() if is_customer else None
     )
     return jsonify(_quote_out(result).model_dump(mode="json"))
+
+
+@orders_bp.post("")
+@roles_required(UserRole.CUSTOMER)
+def place_order() -> tuple[Response, int]:
+    """Places an order through the CheckoutFacade. Broken order rules → 422."""
+    body = parse_body(CheckoutIn)
+    request = replace(
+        _quote_request(body),
+        delivery_address=body.delivery_address,
+        delivery_note=body.delivery_note,
+    )
+    order = get_services().checkout.place_order(
+        CheckoutRequest(quote=request, payment_method=body.payment_method),
+        customer_id=current_user_id(),
+    )
+    return jsonify(_order_out(order)), 201
+
+
+@orders_bp.get("/<int:order_id>")
+@jwt_required()
+def get_order(order_id: int) -> Response:
+    order = get_services().orders.get_order(order_id, current_user_id(), get_jwt()["role"])
+    return jsonify(_order_out(order))

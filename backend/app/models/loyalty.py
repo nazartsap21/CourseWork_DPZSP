@@ -35,6 +35,16 @@ class LoyaltyAccount(db.Model):
         order_by="BonusTransaction.created_at.desc()",
     )
 
+    def redeem(self, points: int, order: Order) -> None:
+        """Spends points on an order and records it in the ledger (Information Expert:
+        the account owns its balance). The caller has already validated the amount."""
+        if points <= 0:
+            return
+        self.points_balance -= points
+        self.transactions.append(
+            BonusTransaction(order=order, delta=-points, reason=BonusReason.ORDER_REDEMPTION)
+        )
+
 
 class BonusTransaction(db.Model):
     """Ledger of point changes; `delta` is positive for accrual, negative for spending."""
