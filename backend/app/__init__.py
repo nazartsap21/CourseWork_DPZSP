@@ -1,3 +1,5 @@
+import logging
+
 from flask import Flask
 
 from . import models  # noqa: F401  (registers tables for Alembic)
@@ -9,7 +11,18 @@ from .domain.events.publisher import OrderEventPublisher
 from .extensions import db, jwt, migrate
 
 
+def _configure_app_logging() -> None:
+    """Our own loggers (e.g. `forkful.commands`) print INFO; libraries keep their defaults."""
+    logger = logging.getLogger("forkful")
+    if not logger.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+        logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
+
+
 def create_app(config_name: str = "default") -> Flask:
+    _configure_app_logging()
     app = Flask(__name__)
     app.config.from_object(config[config_name])
 

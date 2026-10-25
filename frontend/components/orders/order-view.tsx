@@ -11,6 +11,7 @@ import { DELIVERY_METHOD_LABELS, PAYMENT_METHOD_LABELS } from "@/lib/order-label
 import { usePayAgain } from "@/lib/payments";
 import type { Order, Tracking } from "@/types/orders";
 
+import { OrderActions } from "./order-actions";
 import { StatusTimeline } from "./status-timeline";
 
 const RouteMap = dynamic(() => import("@/components/maps/route-map"), {
@@ -137,6 +138,8 @@ export function OrderView({ orderId }: { orderId: number }) {
           )}
         </div>
       )}
+
+      <OrderActions order={order} />
 
       <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_22rem]">
         <div className="space-y-8">

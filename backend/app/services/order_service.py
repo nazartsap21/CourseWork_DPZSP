@@ -9,9 +9,10 @@ from ..domain.errors import BusinessRuleError, NotFoundError
 from ..domain.events.publisher import OrderEventPublisher
 from ..domain.orders.permissions import Actor, OrderAccess, authorize, is_allowed
 from ..domain.orders.states import OrderFacts, state_for
+from ..domain.payments.factory import PaymentGatewayFactory
 from ..models import DeliveryMethod, Order, OrderStatus, PaymentMethod, PaymentStatus, UserRole
 from ..models.base import utcnow
-from ..repositories import OrderRepository, PageResult
+from ..repositories import LoyaltyRepository, OrderRepository, PageResult
 from .order_events import transition
 
 # Statuses staff can set through the API, and the State action behind each.
@@ -60,11 +61,15 @@ class OrderService:
         orders: OrderRepository,
         events: OrderEventPublisher,
         routes: RouteProvider,
+        loyalty: LoyaltyRepository,
+        gateways: PaymentGatewayFactory,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._orders = orders
         self._events = events
         self._routes = routes
+        self._loyalty = loyalty
+        self._gateways = gateways
         self._clock = clock
 
     def get_order(self, order_id: int, actor: Actor) -> Order:
@@ -109,6 +114,50 @@ class OrderService:
         transition(self._events, order, next_state.status, changed_by_id=actor.user_id)
         self._orders.commit()
         return order
+
+    def can_cancel(self, order: Order, actor: Actor) -> bool:
+        return "cancel" in state_for(order.status).available_actions(
+            order_facts(order)
+        ) and is_allowed("cancel", actor, order_access(order))
+
+    def cancel(self, order_id: int, actor_user_id: int, actor_role: str) -> Order:
+        """Receiver of `CancelOrderCommand`.
+
+        Everything happens in one transaction: the State transition, giving back
+        spent points, refunding a paid online payment and publishing the change.
+        If the refund fails, the order stays as it was.
+        """
+        actor = Actor(user_id=actor_user_id, role=actor_role)
+        order = self._orders.get_with_details(order_id, for_update=True)
+        if order is None or not self._can_view(order, actor):
+            raise NotFoundError("Order not found.", "ORDER_NOT_FOUND")
+        authorize("cancel", actor, order_access(order))
+        next_state = state_for(order.status).apply("cancel", order_facts(order))
+        try:
+            self._refund_points(order)
+            self._refund_payments(order)
+            transition(self._events, order, next_state.status, changed_by_id=actor_user_id)
+            self._orders.commit()
+        except Exception:
+            self._orders.rollback()
+            raise
+        return order
+
+    def _refund_points(self, order: Order) -> None:
+        if order.bonus_points_used == 0:
+            return
+        account = self._loyalty.get_account(order.customer_id, for_update=True)
+        if account is not None:
+            account.refund_points(order.bonus_points_used, order)
+
+    def _refund_payments(self, order: Order) -> None:
+        for payment in order.payments:
+            if payment.status != PaymentStatus.PAID or payment.external_id is None:
+                continue
+            gateway = self._gateways.for_provider(payment.provider)
+            gateway.refund(payment.external_id, payment.amount)
+            payment.status = PaymentStatus.REFUNDED
+            order.payment_status = PaymentStatus.REFUNDED
 
     def tracking(self, order_id: int, actor: Actor) -> Tracking:
         """Route and simulated courier position, recomputed on every request."""

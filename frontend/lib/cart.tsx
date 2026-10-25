@@ -37,6 +37,8 @@ interface CartContextValue {
   setQuantity: (dishId: number, quantity: number) => void;
   syncPrices: (dishes: Map<number, CartDish>) => void;
   clear: () => void;
+  /** Replaces the whole cart, e.g. with a reordered past order. */
+  replace: (next: Cart) => void;
   quantityOf: (dishId: number) => number;
 }
 
@@ -68,6 +70,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const clear = useCallback(() => writeCart(EMPTY_CART), []);
+  const replace = useCallback((next: Cart) => writeCart(next), []);
 
   const value = useMemo<CartContextValue>(() => {
     const quantities = new Map(cart.items.map((item) => [item.dish_id, item.quantity]));
@@ -80,9 +83,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       setQuantity,
       syncPrices,
       clear,
+      replace,
       quantityOf: (dishId) => quantities.get(dishId) ?? 0,
     };
-  }, [cart, user, add, setQuantity, syncPrices, clear]);
+  }, [cart, user, add, setQuantity, syncPrices, clear, replace]);
 
   return (
     <CartContext.Provider value={value}>

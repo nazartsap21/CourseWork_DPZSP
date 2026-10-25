@@ -183,6 +183,8 @@ class OrderOut(BaseModel):
     status_history: list[StatusChangeOut]
     # Statuses the current viewer may move the order to (buttons in staff UIs).
     available_transitions: list[OrderStatus] = []
+    # Whether the current viewer may cancel it now (customer: own order, not yet cooking).
+    can_cancel: bool = False
 
 
 class CustomerContactOut(BaseModel):
@@ -233,6 +235,33 @@ class TrackingOut(BaseModel):
     # Road route as [lat, lng] pairs; empty until the courier picks the order up.
     route: list[tuple[float, float]]
     courier: CourierPositionOut | None
+
+
+class ReorderItemOut(BaseModel):
+    dish_id: int
+    name: str
+    price: int
+    quantity: int
+
+
+class SkippedItemOut(BaseModel):
+    name: str
+    reason: str
+
+
+class PriceChangeOut(BaseModel):
+    name: str
+    old_price: int
+    new_price: int
+
+
+class ReorderOut(BaseModel):
+    """A ready cart (prices in kopiyky, from today's menu) plus what changed."""
+
+    restaurant: dict[str, int | str]
+    items: list[ReorderItemOut]
+    skipped: list[SkippedItemOut]
+    price_changes: list[PriceChangeOut]
 
 
 class StatusChangeIn(BaseModel):

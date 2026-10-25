@@ -2,13 +2,14 @@
 
 import { ArrowLeft, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
 
 import type { ApiError } from "@/lib/api";
 import { useCart } from "@/lib/cart";
 import type { CartDish, CartItem } from "@/lib/cart-store";
 import { formatPrice } from "@/lib/format";
+import { clearReorderNotice, readReorderNotice } from "@/lib/reorder";
 import { useHydrated } from "@/lib/use-hydrated";
 import type { Menu } from "@/types/catalog";
 
@@ -17,6 +18,9 @@ import { QuantityStepper } from "./quantity-stepper";
 export function CartView() {
   const { cart, setQuantity, syncPrices, clear, canOrder } = useCart();
   const hydrated = useHydrated();
+  // Shown once after "Order again"; read on first render, cleared from storage right after.
+  const [reorderNotice, setReorderNotice] = useState(readReorderNotice);
+  useEffect(() => clearReorderNotice(), []);
   const restaurant = cart.restaurant;
 
   // The cart stores snapshots; the live menu tells us about price changes and sold-out dishes.
@@ -80,6 +84,26 @@ export function CartView() {
       </Link>
       <h1 className="mt-4 font-serif text-4xl tracking-tight text-ink">Your order</h1>
       <p className="mt-1 text-muted-ink">from {restaurant.name}</p>
+
+      {reorderNotice && (
+        <div role="status" className="mt-6 flex items-start justify-between gap-4 rounded-lg bg-surface px-4 py-3 text-sm">
+          <div>
+            <p className="font-medium text-ink">Dishes from order #{reorderNotice.orderId} are in your cart.</p>
+            {reorderNotice.lines.map((line) => (
+              <p key={line} className="mt-0.5 text-muted-ink">
+                {line}
+              </p>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => setReorderNotice(null)}
+            className="shrink-0 text-xs font-medium text-muted-ink hover:text-ink"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {restaurantClosed && (
         <p role="alert" className="mt-6 rounded-lg border border-accent-strong/30 bg-accent/10 px-4 py-3 text-sm text-accent-strong">

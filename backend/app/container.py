@@ -22,6 +22,7 @@ from .domain.delivery.strategies import (
 )
 from .domain.events.observers import NotificationObserver, StatusHistoryObserver
 from .domain.events.publisher import OrderEventPublisher
+from .domain.orders.commands import CommandInvoker, LoggerCommandLog
 from .domain.orders.validation import build_order_validation_chain
 from .domain.payments.factory import PaymentGatewayFactory
 from .domain.payments.stripe_adapter import StripeGateway
@@ -44,6 +45,7 @@ from .services.checkout_facade import CheckoutFacade
 from .services.courier_service import CourierService
 from .services.favorites_service import FavoritesService
 from .services.notification_service import NotificationService
+from .services.order_actions import OrderActions
 from .services.order_service import OrderService
 from .services.payment_service import PaymentService, ReturnUrls
 from .services.quote_service import OrderQuoteService
@@ -62,6 +64,7 @@ class Services:
     notifications: NotificationService
     courier: CourierService
     favorites: FavoritesService
+    order_actions: OrderActions
 
 
 def register_order_observers(publisher: OrderEventPublisher) -> None:
@@ -108,16 +111,20 @@ def build_services(config: Config) -> Services:
         events,
     )
     catalog = CatalogService(restaurants, dishes, CuisineRepository(session))
+    order_service = OrderService(orders, events, routes, loyalty, gateways)
     return Services(
         auth=AuthService(UserRepository(session)),
         catalog=catalog,
         quotes=quotes,
         checkout=CheckoutFacade(quotes, orders, loyalty, payments, events),
-        orders=OrderService(orders, events, routes),
+        orders=order_service,
         payments=payments,
         notifications=NotificationService(NotificationRepository(session)),
         courier=CourierService(orders),
         favorites=FavoritesService(FavoriteRepository(session), restaurants, catalog),
+        order_actions=OrderActions(
+            CommandInvoker(LoggerCommandLog()), order_service, past_orders=orders, menu=dishes
+        ),
     )
 
 

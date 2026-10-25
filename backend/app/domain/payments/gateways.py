@@ -65,6 +65,10 @@ class PaymentGateway(ABC):
     @abstractmethod
     def verify(self, external_id: str) -> PaymentVerification: ...
 
+    @abstractmethod
+    def refund(self, external_id: str, amount: int) -> None:
+        """Returns a captured payment in full. Raises `PaymentProviderError` on failure."""
+
 
 class CashGateway(PaymentGateway):
     """Cash on delivery or at pickup: nothing to start online, paid when handed over."""
@@ -80,6 +84,10 @@ class CashGateway(PaymentGateway):
 
     def verify(self, external_id: str) -> PaymentVerification:
         return PaymentVerification(is_paid=False, amount=None)
+
+    def refund(self, external_id: str, amount: int) -> None:
+        # Nothing was taken online; cash orders can't be cancelled after handover.
+        return None
 
 
 class MockGateway(PaymentGateway):
@@ -101,3 +109,6 @@ class MockGateway(PaymentGateway):
 
     def verify(self, external_id: str) -> PaymentVerification:
         return PaymentVerification(is_paid=external_id.startswith(self.ID_PREFIX), amount=None)
+
+    def refund(self, external_id: str, amount: int) -> None:
+        return None

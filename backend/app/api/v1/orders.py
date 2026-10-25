@@ -20,6 +20,7 @@ from ...schemas.orders import (
     QuotedItemOut,
     QuoteIn,
     QuoteOut,
+    ReorderOut,
     StatusChangeIn,
     TrackingOut,
     ValidationIssueOut,
@@ -142,6 +143,7 @@ def _order_detail(order: Order, actor: Actor) -> dict:
     detail.available_transitions = [
         OrderStatus(status) for status in get_services().orders.available_transitions(order, actor)
     ]
+    detail.can_cancel = get_services().orders.can_cancel(order, actor)
     return detail.model_dump(mode="json")
 
 
@@ -212,3 +214,30 @@ def order_history() -> Response:
         pages=result.pages,
     )
     return jsonify(page.model_dump(mode="json"))
+
+
+@orders_bp.post("/<int:order_id>/reorder")
+@roles_required(UserRole.CUSTOMER)
+def reorder(order_id: int) -> Response:
+    """Runs `ReorderCommand`: a cart rebuilt from the past order at today's prices."""
+    result = get_services().order_actions.reorder(order_id, current_user_id())
+    out = ReorderOut(
+        restaurant={
+            "id": result.restaurant_id,
+            "name": result.restaurant_name,
+            "min_order_amount": result.restaurant_min_order,
+        },
+        items=[vars(item) for item in result.items],
+        skipped=[vars(item) for item in result.skipped],
+        price_changes=[vars(change) for change in result.price_changes],
+    )
+    return jsonify(out.model_dump(mode="json"))
+
+
+@orders_bp.post("/<int:order_id>/cancel")
+@roles_required(UserRole.CUSTOMER, UserRole.ADMIN)
+def cancel_order(order_id: int) -> Response:
+    """Runs `CancelOrderCommand`: State check, points and payment refunds, events."""
+    actor = _current_actor()
+    order = get_services().order_actions.cancel(order_id, actor)
+    return jsonify(_order_detail(order, actor))

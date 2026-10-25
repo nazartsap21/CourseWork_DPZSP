@@ -1,11 +1,12 @@
 "use client";
 
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, RotateCcw } from "lucide-react";
 import Link from "next/link";
 import useSWRInfinite from "swr/infinite";
 
 import type { ApiError } from "@/lib/api";
 import { formatPrice } from "@/lib/format";
+import { useReorder } from "@/lib/reorder";
 import { ORDER_STATUS_LABELS } from "@/lib/order-labels";
 import type { Page } from "@/types/api";
 import type { OrderStatus, OrderSummary } from "@/types/orders";
@@ -35,6 +36,7 @@ export function OrderHistory() {
   const total = data?.[0]?.total ?? 0;
   const hasMore = orders.length < total;
   const loadingMore = isValidating && size > (data?.length ?? 0);
+  const { reorder, pendingId, errorFor } = useReorder();
 
   if (error) {
     return (
@@ -71,10 +73,10 @@ export function OrderHistory() {
     <>
       <ul className="border-t border-line">
         {orders.map((order) => (
-          <li key={order.id}>
+          <li key={order.id} className="flex flex-wrap items-center gap-x-3 border-b border-line">
             <Link
               href={`/orders/${order.id}`}
-              className="group flex items-center gap-4 border-b border-line py-4 transition hover:bg-surface/60 sm:px-2"
+              className="group flex min-w-0 flex-1 basis-64 items-center gap-4 py-4 transition hover:bg-surface/60 sm:px-2"
             >
               <div className="min-w-0 flex-1">
                 <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -91,6 +93,21 @@ export function OrderHistory() {
               <span className="shrink-0 font-medium tabular-nums text-ink">{formatPrice(order.total)}</span>
               <ChevronRight aria-hidden className="h-4 w-4 shrink-0 text-muted-ink group-hover:text-ink" />
             </Link>
+            <button
+              type="button"
+              onClick={() => void reorder(order.id)}
+              disabled={pendingId !== null}
+              aria-label={`Order again from ${order.restaurant.name}`}
+              className="mb-4 inline-flex items-center gap-1.5 rounded-full border border-line px-3 py-1.5 text-sm font-medium text-ink hover:border-muted-ink/50 disabled:opacity-50 sm:mb-0"
+            >
+              <RotateCcw aria-hidden className="h-3.5 w-3.5" />
+              {pendingId === order.id ? "Adding…" : "Order again"}
+            </button>
+            {errorFor(order.id) && (
+              <p role="alert" className="w-full pb-3 text-sm text-accent-strong">
+                {errorFor(order.id)}
+              </p>
+            )}
           </li>
         ))}
       </ul>

@@ -2,6 +2,7 @@ from sqlalchemy import Select, func, select
 from sqlalchemy.orm import selectinload
 
 from ..domain.orders.builder import OrderDraft
+from ..domain.orders.commands import PastOrder, PastOrderItem
 from ..domain.pricing.decorators import PriceBreakdown
 from ..models import (
     DeliveryMethod,
@@ -128,3 +129,19 @@ class OrderRepository(SqlAlchemyRepository):
             )
         )
         return PageResult(items=items, total=total, page=page, per_page=per_page)
+
+    def past_order(self, order_id: int, customer_id: int) -> PastOrder | None:
+        """Implements `PastOrders` for `ReorderCommand`: the order as plain data."""
+        order = self.get_with_details(order_id)
+        if order is None or order.customer_id != customer_id:
+            return None
+        return PastOrder(
+            restaurant_id=order.restaurant.id,
+            restaurant_name=order.restaurant.name,
+            restaurant_active=order.restaurant.is_active,
+            restaurant_min_order=order.restaurant.min_order_amount,
+            items=[
+                PastOrderItem(item.dish_id, item.name, item.price, item.quantity)
+                for item in order.items
+            ],
+        )

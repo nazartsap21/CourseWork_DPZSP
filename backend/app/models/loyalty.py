@@ -45,6 +45,15 @@ class LoyaltyAccount(db.Model):
             BonusTransaction(order=order, delta=-points, reason=BonusReason.ORDER_REDEMPTION)
         )
 
+    def refund_points(self, points: int, order: Order) -> None:
+        """Gives back points spent on an order that was cancelled."""
+        if points <= 0:
+            return
+        self.points_balance += points
+        self.transactions.append(
+            BonusTransaction(order=order, delta=points, reason=BonusReason.REDEMPTION_REFUND)
+        )
+
 
 class BonusTransaction(db.Model):
     """Ledger of point changes; `delta` is positive for accrual, negative for spending."""

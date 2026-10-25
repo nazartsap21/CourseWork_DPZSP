@@ -62,3 +62,18 @@ class StripeGateway(PaymentGateway):
         return PaymentVerification(
             is_paid=session.payment_status == "paid", amount=session.amount_total
         )
+
+    def refund(self, external_id: str, amount: int) -> None:
+        # Checkout Sessions are refunded through the PaymentIntent they created.
+        try:
+            session = self._client.checkout.sessions.retrieve(external_id)
+            if not session.payment_intent:
+                raise PaymentProviderError("Stripe has no payment to refund for this order.")
+            intent_id = (
+                session.payment_intent
+                if isinstance(session.payment_intent, str)
+                else session.payment_intent.id
+            )
+            self._client.refunds.create(params={"payment_intent": intent_id, "amount": amount})
+        except stripe.StripeError as error:
+            raise PaymentProviderError("Stripe couldn't refund the payment.") from error

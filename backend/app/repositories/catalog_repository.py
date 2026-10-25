@@ -5,6 +5,7 @@ from sqlalchemy.orm import selectinload
 
 from ..domain.catalog.queries import RestaurantQuery, RestaurantSort
 from ..domain.catalog.rules import CATALOG_TRAVEL_MINUTES, price_level_range
+from ..domain.orders.builder import DishSnapshot
 from ..models import Cuisine, Dish, Restaurant, Review, restaurant_cuisines
 from .base import PageResult, SqlAlchemyRepository
 
@@ -153,6 +154,13 @@ class DishRepository(SqlAlchemyRepository):
                 select(Dish).where(Dish.restaurant_id == restaurant_id, Dish.id.in_(dish_ids))
             )
         )
+
+    def dish_snapshots(self, restaurant_id: int, dish_ids: list[int]) -> list[DishSnapshot]:
+        """Implements `CurrentMenu` for `ReorderCommand`."""
+        return [
+            DishSnapshot(d.id, d.restaurant_id, d.name, d.price, d.is_available)
+            for d in self.get_many_for_restaurant(restaurant_id, dish_ids)
+        ]
 
     def list_for_restaurant(self, restaurant_id: int) -> list[Dish]:
         return list(

@@ -112,6 +112,8 @@ export interface Order {
   status_history: { status: OrderStatus; changed_at: string }[];
   /** Statuses the current viewer may move the order to (staff UIs). */
   available_transitions: OrderStatus[];
+  /** Whether the current viewer may cancel the order now. */
+  can_cancel: boolean;
 }
 
 export interface PlacedOrder extends Order {
@@ -162,4 +164,12 @@ export interface OrderSummary {
   delivery_method: DeliveryMethod;
   total: number;
   created_at: string;
+}
+
+export interface ReorderResult {
+  restaurant: { id: number; name: string; min_order_amount: number };
+  /** Current menu prices, in kopiyky. */
+  items: { dish_id: number; name: string; price: number; quantity: number }[];
+  skipped: { name: string; reason: string }[];
+  price_changes: { name: string; old_price: number; new_price: number }[];
 }
