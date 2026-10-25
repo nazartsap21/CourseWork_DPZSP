@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, LogOut, UserRound } from "lucide-react";
+import { ChevronDown, Heart, LogOut, Receipt, UserRound } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useRef, useState } from "react";
@@ -8,6 +8,12 @@ import { useCallback, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { useDismiss } from "@/lib/use-dismiss";
 import type { User } from "@/types/api";
+
+const CUSTOMER_LINKS = [
+  { href: "/orders", label: "My orders", icon: Receipt },
+  { href: "/favorites", label: "Favorites", icon: Heart },
+  { href: "/account", label: "Account", icon: UserRound },
+] as const;
 
 const ROLE_LABEL: Record<User["role"], string> = {
   customer: "Customer",
@@ -65,17 +71,19 @@ export function UserMenu({ user }: { user: User }) {
             <p className="truncate text-xs text-muted-ink">{user.email}</p>
             <p className="mt-1 text-xs uppercase tracking-wider text-sage">{ROLE_LABEL[user.role]}</p>
           </div>
-          {user.role === "customer" && (
-            <Link
-              href="/account"
-              role="menuitem"
-              onClick={() => setOpen(false)}
-              className="flex items-center gap-2 px-4 py-2.5 text-sm text-ink hover:bg-surface"
-            >
-              <UserRound aria-hidden className="h-4 w-4 text-muted-ink" />
-              My account
-            </Link>
-          )}
+          {user.role === "customer" &&
+            CUSTOMER_LINKS.map(({ href, label, icon: Icon }) => (
+              <Link
+                key={href}
+                href={href}
+                role="menuitem"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2 px-4 py-2.5 text-sm text-ink hover:bg-surface"
+              >
+                <Icon aria-hidden className="h-4 w-4 text-muted-ink" />
+                {label}
+              </Link>
+            ))}
           <button
             type="button"
             role="menuitem"

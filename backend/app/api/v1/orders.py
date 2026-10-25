@@ -7,11 +7,13 @@ from ...container import get_services
 from ...domain.delivery.geo import GeoPoint
 from ...domain.orders.permissions import Actor
 from ...models import Order, OrderStatus, UserRole
+from ...schemas.common import Page, PageParams
 from ...schemas.orders import (
     CheckoutIn,
     DeliveryOut,
     LoyaltyOut,
     OrderOut,
+    OrderSummaryOut,
     PaymentSessionOut,
     PlacedOrderOut,
     PriceLineOut,
@@ -25,7 +27,7 @@ from ...schemas.orders import (
 from ...services.checkout_facade import CheckoutRequest
 from ...services.quote_service import Quote, QuoteItemRequest, QuoteRequest
 from ..security import current_user_id, roles_required
-from ..validation import parse_body
+from ..validation import parse_body, parse_query
 
 orders_bp = Blueprint("orders", __name__, url_prefix="/orders")
 
@@ -194,3 +196,19 @@ def tracking(order_id: int) -> Response:
         else None,
     )
     return jsonify(out.model_dump(mode="json"))
+
+
+@orders_bp.get("")
+@roles_required(UserRole.CUSTOMER)
+def order_history() -> Response:
+    """The signed-in customer's orders, newest first (`?page=&per_page=`)."""
+    params = parse_query(PageParams)
+    result = get_services().orders.history(current_user_id(), params.page, params.per_page)
+    page = Page[OrderSummaryOut](
+        items=[OrderSummaryOut.model_validate(order) for order in result.items],
+        total=result.total,
+        page=result.page,
+        per_page=result.per_page,
+        pages=result.pages,
+    )
+    return jsonify(page.model_dump(mode="json"))

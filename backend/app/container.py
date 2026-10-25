@@ -29,6 +29,7 @@ from .extensions import db
 from .repositories import (
     CuisineRepository,
     DishRepository,
+    FavoriteRepository,
     LoyaltyRepository,
     NotificationRepository,
     OrderRepository,
@@ -41,6 +42,7 @@ from .services.auth_service import AuthService
 from .services.catalog_service import CatalogService
 from .services.checkout_facade import CheckoutFacade
 from .services.courier_service import CourierService
+from .services.favorites_service import FavoritesService
 from .services.notification_service import NotificationService
 from .services.order_service import OrderService
 from .services.payment_service import PaymentService, ReturnUrls
@@ -59,6 +61,7 @@ class Services:
     payments: PaymentService
     notifications: NotificationService
     courier: CourierService
+    favorites: FavoritesService
 
 
 def register_order_observers(publisher: OrderEventPublisher) -> None:
@@ -104,15 +107,17 @@ def build_services(config: Config) -> Services:
         ReturnUrls.for_frontend(config["FRONTEND_URL"]),
         events,
     )
+    catalog = CatalogService(restaurants, dishes, CuisineRepository(session))
     return Services(
         auth=AuthService(UserRepository(session)),
-        catalog=CatalogService(restaurants, dishes, CuisineRepository(session)),
+        catalog=catalog,
         quotes=quotes,
         checkout=CheckoutFacade(quotes, orders, loyalty, payments, events),
         orders=OrderService(orders, events, routes),
         payments=payments,
         notifications=NotificationService(NotificationRepository(session)),
         courier=CourierService(orders),
+        favorites=FavoritesService(FavoriteRepository(session), restaurants, catalog),
     )
 
 

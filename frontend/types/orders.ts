@@ -153,3 +153,13 @@ export interface Tracking {
   route: [number, number][];
   courier: (LatLng & { progress: number; minutes_left: number }) | null;
 }
+
+export interface OrderSummary {
+  id: number;
+  status: OrderStatus;
+  restaurant: { id: number; name: string };
+  items: OrderItem[];
+  delivery_method: DeliveryMethod;
+  total: number;
+  created_at: string;
+}

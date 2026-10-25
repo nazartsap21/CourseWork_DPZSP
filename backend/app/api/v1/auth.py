@@ -3,7 +3,14 @@ from flask_jwt_extended import create_access_token, jwt_required
 
 from ...container import get_services
 from ...models import User
-from ...schemas.auth import AuthResponse, LoginRequest, RegisterRequest, UserOut
+from ...schemas.auth import (
+    AuthResponse,
+    LoginRequest,
+    PasswordChangeIn,
+    ProfileUpdateIn,
+    RegisterRequest,
+    UserOut,
+)
 from ...services.auth_service import RegistrationData
 from ..security import current_user_id
 from ..validation import parse_body
@@ -37,3 +44,19 @@ def login() -> Response:
 def me() -> Response:
     user = get_services().auth.get_user(current_user_id())
     return jsonify(UserOut.model_validate(user).model_dump(mode="json"))
+
+
+@auth_bp.patch("/me")
+@jwt_required()
+def update_me() -> Response:
+    body = parse_body(ProfileUpdateIn)
+    user = get_services().auth.update_profile(current_user_id(), body.name, body.phone)
+    return jsonify(UserOut.model_validate(user).model_dump(mode="json"))
+
+
+@auth_bp.post("/me/password")
+@jwt_required()
+def change_password() -> tuple[str, int]:
+    body = parse_body(PasswordChangeIn)
+    get_services().auth.change_password(current_user_id(), body.current_password, body.new_password)
+    return "", 204

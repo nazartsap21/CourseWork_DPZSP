@@ -6,6 +6,7 @@ from .catalog_repository import (
     RestaurantRepository,
     RestaurantStats,
 )
+from .favorite_repository import FavoriteRepository
 from .loyalty_repository import LoyaltyRepository
 from .notification_repository import NotificationRepository
 from .order_repository import OrderRepository
@@ -17,6 +18,7 @@ __all__ = [
     "CuisineRepository",
     "CuisineWithCount",
     "DishRepository",
+    "FavoriteRepository",
     "LoyaltyRepository",
     "NotificationRepository",
     "OrderRepository",

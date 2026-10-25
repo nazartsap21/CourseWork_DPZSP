@@ -1,6 +1,11 @@
 from dataclasses import dataclass
 
-from ..domain.errors import AuthenticationError, ConflictError, NotFoundError
+from ..domain.errors import (
+    AuthenticationError,
+    BusinessRuleError,
+    ConflictError,
+    NotFoundError,
+)
 from ..models import LoyaltyAccount, User, UserRole
 from ..repositories import UserRepository
 
@@ -41,6 +46,23 @@ class AuthService:
         if user is None or not user.check_password(password):
             raise AuthenticationError("Email or password is incorrect.", "INVALID_CREDENTIALS")
         return user
+
+    def update_profile(self, user_id: int, name: str, phone: str | None) -> User:
+        user = self.get_user(user_id)
+        user.name = name
+        user.phone = phone
+        self._users.commit()
+        return user
+
+    def change_password(self, user_id: int, current_password: str, new_password: str) -> None:
+        user = self.get_user(user_id)
+        # A field error, not 401: the session is valid, only the typed password is wrong.
+        if not user.check_password(current_password):
+            raise BusinessRuleError(
+                "The current password is incorrect.", "WRONG_PASSWORD", field="current_password"
+            )
+        user.set_password(new_password)
+        self._users.commit()
 
     def get_user(self, user_id: int) -> User:
         user = self._users.get_by_id(user_id)

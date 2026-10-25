@@ -74,6 +74,10 @@ class CatalogService:
         self._require_active(restaurant_id)
         return group_menu(self._dishes.list_for_restaurant(restaurant_id))
 
+    def list_by_ids(self, restaurant_ids: list[int]) -> list[RestaurantSummary]:
+        """Active restaurants among the ids, as catalog cards (e.g. a customer's favorites)."""
+        return [self._summary(s) for s in self._restaurants.list_active_with_stats(restaurant_ids)]
+
     def list_cuisines(self) -> list[CuisineWithCount]:
         return self._cuisines.list_with_counts()
 

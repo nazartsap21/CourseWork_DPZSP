@@ -1,4 +1,4 @@
-from sqlalchemy import Select, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.orm import selectinload
 
 from ..domain.orders.builder import OrderDraft
@@ -11,7 +11,7 @@ from ..models import (
     PaymentMethod,
     PaymentStatus,
 )
-from .base import SqlAlchemyRepository
+from .base import PageResult, SqlAlchemyRepository
 
 
 class OrderRepository(SqlAlchemyRepository):
@@ -108,3 +108,23 @@ class OrderRepository(SqlAlchemyRepository):
                 .order_by(Order.created_at)
             )
         )
+
+    def page_for_customer(self, customer_id: int, page: int, per_page: int) -> PageResult[Order]:
+        """The customer's orders, newest first."""
+        total = (
+            self._session.scalar(
+                select(func.count(Order.id)).where(Order.customer_id == customer_id)
+            )
+            or 0
+        )
+        items = list(
+            self._session.scalars(
+                select(Order)
+                .where(Order.customer_id == customer_id)
+                .options(selectinload(Order.items), selectinload(Order.restaurant))
+                .order_by(Order.created_at.desc(), Order.id.desc())
+                .offset((page - 1) * per_page)
+                .limit(per_page)
+            )
+        )
+        return PageResult(items=items, total=total, page=page, per_page=per_page)

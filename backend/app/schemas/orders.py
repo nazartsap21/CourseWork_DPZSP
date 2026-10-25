@@ -119,6 +119,27 @@ class OrderItemOut(BaseModel):
     quantity: int
 
 
+class OrderSummaryRestaurantOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+
+
+class OrderSummaryOut(BaseModel):
+    """One row of the order history. `total` is kopiyky."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    status: OrderStatus
+    restaurant: OrderSummaryRestaurantOut
+    items: list[OrderItemOut]
+    delivery_method: DeliveryMethod
+    total: int
+    created_at: datetime
+
+
 class StatusChangeOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

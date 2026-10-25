@@ -13,6 +13,7 @@ import type { CartRestaurant } from "@/lib/cart-store";
 import { formatDeliveryWindow, formatPrice } from "@/lib/format";
 import type { Menu, RestaurantDetails } from "@/types/catalog";
 
+import { FavoriteButton } from "./favorite-button";
 import { MenuSections, MenuSkeleton } from "./menu-sections";
 import { RatingSummary } from "./rating-summary";
 
@@ -80,9 +81,10 @@ export function RestaurantView({ restaurantId }: { restaurantId: number }) {
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-sage">
               {restaurant.cuisines.map((c) => c.name).join(" · ")}
             </p>
-            <h1 className="mt-2 font-serif text-4xl leading-tight tracking-tight text-ink sm:text-5xl">
-              {restaurant.name}
-            </h1>
+            <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-3">
+              <h1 className="font-serif text-4xl leading-tight tracking-tight text-ink sm:text-5xl">{restaurant.name}</h1>
+              <FavoriteButton restaurant={restaurant} />
+            </div>
             <p className="mt-3 max-w-2xl text-lg text-muted-ink">{restaurant.description}</p>
             <p className="mt-3 inline-flex items-center gap-1.5 text-sm text-muted-ink">
               <MapPin aria-hidden className="h-4 w-4 text-sage" />

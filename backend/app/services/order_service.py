@@ -11,7 +11,7 @@ from ..domain.orders.permissions import Actor, OrderAccess, authorize, is_allowe
 from ..domain.orders.states import OrderFacts, state_for
 from ..models import DeliveryMethod, Order, OrderStatus, PaymentMethod, PaymentStatus, UserRole
 from ..models.base import utcnow
-from ..repositories import OrderRepository
+from ..repositories import OrderRepository, PageResult
 from .order_events import transition
 
 # Statuses staff can set through the API, and the State action behind each.
@@ -73,6 +73,9 @@ class OrderService:
         if order is None or not self._can_view(order, actor):
             raise NotFoundError("Order not found.", "ORDER_NOT_FOUND")
         return order
+
+    def history(self, customer_id: int, page: int, per_page: int) -> PageResult[Order]:
+        return self._orders.page_for_customer(customer_id, page, per_page)
 
     def available_transitions(self, order: Order, actor: Actor) -> list[str]:
         """Statuses this actor can move the order to right now (for UI buttons)."""

@@ -120,6 +120,16 @@ class RestaurantRepository(SqlAlchemyRepository):
         row = self._session.execute(stmt).first()
         return self._to_stats(row.tuple()) if row else None
 
+    def list_active_with_stats(self, restaurant_ids: list[int]) -> list[RestaurantStats]:
+        if not restaurant_ids:
+            return []
+        stmt = (
+            self._with_stats()
+            .where(Restaurant.id.in_(restaurant_ids), Restaurant.is_active.is_(True))
+            .order_by(Restaurant.name)
+        )
+        return [self._to_stats(row) for row in self._session.execute(stmt).all()]
+
     def get_by_id(self, restaurant_id: int) -> Restaurant | None:
         """Active or not: ordering reports an inactive restaurant as a validation error."""
         return self._session.get(Restaurant, restaurant_id)
