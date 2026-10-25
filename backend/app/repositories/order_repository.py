@@ -70,6 +70,7 @@ class OrderRepository(SqlAlchemyRepository):
                 selectinload(Order.items),
                 selectinload(Order.status_history),
                 selectinload(Order.restaurant),
+                selectinload(Order.review),
             )
         )
         if for_update:

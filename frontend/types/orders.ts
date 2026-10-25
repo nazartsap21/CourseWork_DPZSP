@@ -1,3 +1,5 @@
+import type { OwnReview } from "./reviews";
+
 // Money fields are integer kopiyky, as returned by the API.
 
 export type DeliveryMethod = "standard" | "express" | "pickup";
@@ -114,6 +116,9 @@ export interface Order {
   available_transitions: OrderStatus[];
   /** Whether the current viewer may cancel the order now. */
   can_cancel: boolean;
+  review: OwnReview | null;
+  /** Own delivered order without a review yet. */
+  can_review: boolean;
 }
 
 export interface PlacedOrder extends Order {

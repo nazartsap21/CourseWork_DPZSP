@@ -25,8 +25,10 @@ from ...schemas.orders import (
     TrackingOut,
     ValidationIssueOut,
 )
+from ...schemas.reviews import OwnReviewOut, ReviewIn
 from ...services.checkout_facade import CheckoutRequest
 from ...services.quote_service import Quote, QuoteItemRequest, QuoteRequest
+from ...services.review_service import can_review
 from ..security import current_user_id, roles_required
 from ..validation import parse_body, parse_query
 
@@ -144,6 +146,7 @@ def _order_detail(order: Order, actor: Actor) -> dict:
         OrderStatus(status) for status in get_services().orders.available_transitions(order, actor)
     ]
     detail.can_cancel = get_services().orders.can_cancel(order, actor)
+    detail.can_review = actor.role == UserRole.CUSTOMER and can_review(order, actor.user_id)
     return detail.model_dump(mode="json")
 
 
@@ -241,3 +244,12 @@ def cancel_order(order_id: int) -> Response:
     actor = _current_actor()
     order = get_services().order_actions.cancel(order_id, actor)
     return jsonify(_order_detail(order, actor))
+
+
+@orders_bp.post("/<int:order_id>/review")
+@roles_required(UserRole.CUSTOMER)
+def review_order(order_id: int) -> tuple[Response, int]:
+    """One review per own delivered order; the restaurant rating updates with it."""
+    body = parse_body(ReviewIn)
+    review = get_services().reviews.create(order_id, current_user_id(), body.rating, body.text)
+    return jsonify(OwnReviewOut.model_validate(review).model_dump(mode="json")), 201

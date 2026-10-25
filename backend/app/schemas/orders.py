@@ -4,6 +4,7 @@ from typing import Self
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
 from ..models import DeliveryMethod, OrderStatus, PaymentMethod, PaymentPurpose, PaymentStatus
+from .reviews import OwnReviewOut
 
 MAX_ITEM_QUANTITY = 20
 MAX_DISTINCT_ITEMS = 50
@@ -185,6 +186,9 @@ class OrderOut(BaseModel):
     available_transitions: list[OrderStatus] = []
     # Whether the current viewer may cancel it now (customer: own order, not yet cooking).
     can_cancel: bool = False
+    review: OwnReviewOut | None = None
+    # Own delivered order that has no review yet.
+    can_review: bool = False
 
 
 class CustomerContactOut(BaseModel):

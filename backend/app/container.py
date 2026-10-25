@@ -40,6 +40,7 @@ from .repositories import (
     OrderRepository,
     PaymentRepository,
     RestaurantRepository,
+    ReviewRepository,
     StatusHistoryRepository,
     UserRepository,
 )
@@ -54,6 +55,7 @@ from .services.order_actions import OrderActions
 from .services.order_service import OrderService
 from .services.payment_service import PaymentService, ReturnUrls
 from .services.quote_service import OrderQuoteService
+from .services.review_service import ReviewService
 
 EXTENSION_KEY = "forkful_services"
 
@@ -71,6 +73,7 @@ class Services:
     favorites: FavoritesService
     order_actions: OrderActions
     loyalty: LoyaltyService
+    reviews: ReviewService
 
 
 def register_order_observers(publisher: OrderEventPublisher) -> None:
@@ -134,6 +137,7 @@ def build_services(config: Config) -> Services:
         courier=CourierService(orders),
         favorites=FavoritesService(FavoriteRepository(session), restaurants, catalog),
         loyalty=LoyaltyService(loyalty, users, payments),
+        reviews=ReviewService(ReviewRepository(session), orders, restaurants),
         order_actions=OrderActions(
             CommandInvoker(LoggerCommandLog()), order_service, past_orders=orders, menu=dishes
         ),

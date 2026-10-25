@@ -10,7 +10,8 @@ from ...schemas.catalog import (
     RestaurantListParams,
     RestaurantSummaryOut,
 )
-from ...schemas.common import Page
+from ...schemas.common import Page, PageParams
+from ...schemas.reviews import PublicReviewOut
 from ..validation import parse_query
 
 catalog_bp = Blueprint("catalog", __name__)
@@ -66,3 +67,18 @@ def get_menu(restaurant_id: int) -> Response:
         sections=[MenuSectionOut.model_validate(section) for section in sections],
     )
     return jsonify(menu.model_dump(mode="json"))
+
+
+@catalog_bp.get("/restaurants/<int:restaurant_id>/reviews")
+def list_reviews(restaurant_id: int) -> Response:
+    """Newest first, paginated (`?page=&per_page=`)."""
+    params = parse_query(PageParams)
+    result = get_services().reviews.for_restaurant(restaurant_id, params.page, params.per_page)
+    page = Page[PublicReviewOut](
+        items=[PublicReviewOut.from_review(review) for review in result.items],
+        total=result.total,
+        page=result.page,
+        per_page=result.per_page,
+        pages=result.pages,
+    )
+    return jsonify(page.model_dump(mode="json"))

@@ -21,7 +21,9 @@ export function RatingSummary({ restaurant }: { restaurant: RestaurantDetails })
       <div className="flex items-baseline gap-2">
         <span className="font-serif text-4xl text-ink">{formatRating(restaurant.rating)}</span>
         <Star aria-hidden className="h-5 w-5 fill-saffron text-saffron" />
-        <span className="text-sm text-muted-ink">{pluralize(restaurant.review_count, "review", "reviews")}</span>
+        <a href="#reviews" className="text-sm text-muted-ink underline-offset-2 hover:text-ink hover:underline">
+          {pluralize(restaurant.review_count, "review", "reviews")}
+        </a>
       </div>
       <ul className="mt-3 space-y-1.5">
         {STARS.map((star) => {

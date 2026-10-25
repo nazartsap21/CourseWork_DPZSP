@@ -13,6 +13,8 @@ import type { CartRestaurant } from "@/lib/cart-store";
 import { formatDeliveryWindow, formatPrice } from "@/lib/format";
 import type { Menu, RestaurantDetails } from "@/types/catalog";
 
+import { ReviewsList } from "@/components/reviews/reviews-list";
+
 import { FavoriteButton } from "./favorite-button";
 import { MenuSections, MenuSkeleton } from "./menu-sections";
 import { RatingSummary } from "./rating-summary";
@@ -126,6 +128,12 @@ export function RestaurantView({ restaurantId }: { restaurantId: number }) {
           <MenuSections menu={menu} restaurant={cartRestaurant} />
         )}
       </div>
+
+      {restaurant && (
+        <div className="mt-14 border-t border-line pt-8">
+          <ReviewsList restaurantId={restaurant.id} />
+        </div>
+      )}
       <OrderBar restaurantId={restaurantId} />
     </main>
   );
