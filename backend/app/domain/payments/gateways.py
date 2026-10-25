@@ -22,9 +22,10 @@ class PaymentProviderError(ExternalServiceError):
 
 @dataclass(frozen=True)
 class PaymentRequest:
-    """`amount` is integer kopiyky. `success_url` contains SESSION_ID_PLACEHOLDER."""
+    """`amount` is integer kopiyky. `success_url` contains SESSION_ID_PLACEHOLDER.
+    `reference` names what is paid for ("order-12", "premium-5"), for the provider's records."""
 
-    order_id: int
+    reference: str
     amount: int
     description: str
     customer_email: str
@@ -101,7 +102,7 @@ class MockGateway(PaymentGateway):
     ID_PREFIX = "mock_"
 
     def start(self, request: PaymentRequest) -> PaymentSession:
-        external_id = f"{self.ID_PREFIX}{request.order_id}_{uuid4().hex[:12]}"
+        external_id = f"{self.ID_PREFIX}{request.reference}_{uuid4().hex[:12]}"
         return PaymentSession(
             external_id=external_id,
             redirect_url=request.success_url.replace(SESSION_ID_PLACEHOLDER, external_id),

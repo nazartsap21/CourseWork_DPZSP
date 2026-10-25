@@ -29,6 +29,9 @@ class SqlAlchemyRepository:
     def add(self, entity: object) -> None:
         self._session.add(entity)
 
+    def flush(self) -> None:
+        self._session.flush()
+
     def commit(self) -> None:
         self._session.commit()
 

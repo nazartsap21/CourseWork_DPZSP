@@ -1,6 +1,6 @@
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 
 from ..domain.delivery.geo import GeoPoint
 from ..domain.delivery.strategies import DeliveryContext, DeliveryQuote, DeliveryStrategyResolver
@@ -14,15 +14,14 @@ from ..domain.orders.validation import (
 from ..domain.pricing.decorators import PriceBreakdown
 from ..domain.pricing.loyalty import (
     GUEST_LOYALTY,
-    LoyaltyRules,
     LoyaltyStatus,
-    loyalty_status,
     max_redeemable_points,
 )
 from ..domain.pricing.policy import calculate_order_price
-from ..models import Dish, LoyaltyAccount, LoyaltySettings, Restaurant
+from ..models import Dish, Restaurant
 from ..models.base import utcnow
 from ..repositories import DishRepository, LoyaltyRepository, RestaurantRepository
+from .loyalty_service import account_status
 
 
 @dataclass(frozen=True)
@@ -55,16 +54,6 @@ class Quote:
     # First broken business rule, if any. A quote is still priced so the
     # checkout can show the numbers next to the problem.
     validation_error: OrderValidationError | None
-
-
-def _rules(settings: LoyaltySettings) -> LoyaltyRules:
-    return LoyaltyRules(
-        points_per_100_uah=settings.points_per_100_uah,
-        point_value=settings.point_value,
-        max_points_redemption_percent=settings.max_points_redemption_percent,
-        regular_customer_threshold=settings.regular_customer_threshold,
-        regular_customer_discount_percent=settings.regular_customer_discount_percent,
-    )
 
 
 def _restaurant_snapshot(restaurant: Restaurant) -> RestaurantSnapshot:
@@ -128,9 +117,11 @@ class OrderQuoteService:
             )
         )
 
-        rules = _rules(self._loyalty.get_settings())
+        rules = self._loyalty.rules()
         account = self._loyalty.get_account(customer_id) if customer_id is not None else None
-        status = self._loyalty_status(account, rules)
+        status = (
+            account_status(account, rules, self._clock()) if account is not None else GUEST_LOYALTY
+        )
         max_points = max_redeemable_points(rules, draft.subtotal, status.points_balance)
 
         try:
@@ -190,19 +181,3 @@ class OrderQuoteService:
         if request.payment_method is not None:
             builder.with_payment(request.payment_method)
         return builder.build()
-
-    def _loyalty_status(self, account: LoyaltyAccount | None, rules: LoyaltyRules) -> LoyaltyStatus:
-        if account is None:
-            return GUEST_LOYALTY
-        premium_until = account.premium_until
-        # SQLite returns naive datetimes; values are always stored in UTC.
-        if premium_until is not None and premium_until.tzinfo is None:
-            premium_until = premium_until.replace(tzinfo=UTC)
-        return loyalty_status(
-            rules,
-            completed_orders=account.completed_orders_count,
-            card_type=account.card_type.value,
-            premium_until=premium_until,
-            points_balance=account.points_balance,
-            now=self._clock(),
-        )

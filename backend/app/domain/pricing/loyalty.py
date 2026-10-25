@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from datetime import datetime
 
+KOPIYKY_PER_100_UAH = 10_000
+
 
 @dataclass(frozen=True)
 class LoyaltyRules:
@@ -37,6 +39,11 @@ def loyalty_status(
         has_premium=card_type == "premium" and premium_until is not None and premium_until > now,
         points_balance=points_balance,
     )
+
+
+def points_earned(rules: LoyaltyRules, paid_total: int) -> int:
+    """Points for a delivered order: `points_per_100_uah` for every full 100 UAH paid."""
+    return paid_total // KOPIYKY_PER_100_UAH * rules.points_per_100_uah
 
 
 def max_redeemable_points(rules: LoyaltyRules, subtotal: int, points_balance: int) -> int:

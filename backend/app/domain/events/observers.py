@@ -6,6 +6,7 @@ the domain layer stays persistence-agnostic; repositories implement the sinks.
 
 from typing import Protocol
 
+from ..pricing.loyalty import LoyaltyRules, points_earned
 from .publisher import OrderObserver, OrderStatusChanged
 
 
@@ -15,6 +16,14 @@ class StatusHistorySink(Protocol):
 
 class NotificationSink(Protocol):
     def notify(self, user_id: int, type: str, message: str, order_id: int | None) -> None: ...
+
+
+class LoyaltyLedger(Protocol):
+    def rules(self) -> LoyaltyRules: ...
+
+    def record_completed_order(self, customer_id: int, order_id: int, points: int) -> int | None:
+        """Counts the order and credits points; returns the new balance (None: no account)."""
+        ...
 
 
 class StatusHistoryObserver(OrderObserver):
@@ -60,3 +69,27 @@ class NotificationObserver(OrderObserver):
         message = status_message(event)
         if message is not None:
             self._notifications.notify(event.customer_id, self.TYPE, message, event.order_id)
+
+
+class LoyaltyObserver(OrderObserver):
+    """Rewards delivered orders: points at the configured rate, one more completed
+    order towards regular-customer status, and a notification with the new balance."""
+
+    TYPE = "bonus_points"
+
+    def __init__(self, ledger: LoyaltyLedger, notifications: NotificationSink) -> None:
+        self._ledger = ledger
+        self._notifications = notifications
+
+    def on_status_changed(self, event: OrderStatusChanged) -> None:
+        if event.new_status != "delivered":
+            return
+        points = points_earned(self._ledger.rules(), event.total)
+        balance = self._ledger.record_completed_order(event.customer_id, event.order_id, points)
+        if balance is not None and points > 0:
+            self._notifications.notify(
+                event.customer_id,
+                self.TYPE,
+                f"You earned {points} points for order #{event.order_id}. Balance: {balance}.",
+                event.order_id,
+            )

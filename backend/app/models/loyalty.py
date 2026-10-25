@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
 from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer
@@ -44,6 +44,25 @@ class LoyaltyAccount(db.Model):
         self.transactions.append(
             BonusTransaction(order=order, delta=-points, reason=BonusReason.ORDER_REDEMPTION)
         )
+
+    def add_completed_order(self, points: int, order: Order) -> None:
+        """A delivered order counts towards regular-customer status and earns points."""
+        self.completed_orders_count += 1
+        if points > 0:
+            self.points_balance += points
+            self.transactions.append(
+                BonusTransaction(order=order, delta=points, reason=BonusReason.ORDER_ACCRUAL)
+            )
+
+    def extend_premium(self, days: int, now: datetime) -> datetime:
+        """Activates the premium card, or adds `days` to one that is still running."""
+        current = self.premium_until
+        if current is not None and current.tzinfo is None:
+            current = current.replace(tzinfo=now.tzinfo)
+        start = current if current is not None and current > now else now
+        self.card_type = CardType.PREMIUM
+        self.premium_until = start + timedelta(days=days)
+        return self.premium_until
 
     def refund_points(self, points: int, order: Order) -> None:
         """Gives back points spent on an order that was cancelled."""

@@ -2,13 +2,15 @@
 
 import { Heart, Receipt } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useSWRConfig } from "swr";
 
 import { FormField } from "@/components/form-field";
 import { ApiError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import type { User } from "@/types/api";
+
+import { LoyaltySection } from "./loyalty-section";
 
 /** Submit state for a small form: field errors from the API, a general error, a "saved" flag. */
 function useFormSubmit() {
@@ -183,6 +185,12 @@ export function AccountView() {
       </nav>
 
       <div className="mt-10 space-y-10">
+        <Section title="Bonus points and card">
+          {/* Reads ?premium=cancelled with useSearchParams, which needs Suspense. */}
+          <Suspense fallback={<div className="h-48 animate-pulse rounded-xl bg-surface" />}>
+            <LoyaltySection />
+          </Suspense>
+        </Section>
         <Section title="Profile">
           {/* Keyed by user so the form resets if a different account signs in. */}
           <ProfileForm key={user.id} user={user} />

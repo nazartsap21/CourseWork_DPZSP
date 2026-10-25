@@ -3,7 +3,7 @@ from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
-from ..models import DeliveryMethod, OrderStatus, PaymentMethod, PaymentStatus
+from ..models import DeliveryMethod, OrderStatus, PaymentMethod, PaymentPurpose, PaymentStatus
 
 MAX_ITEM_QUANTITY = 20
 MAX_DISTINCT_ITEMS = 50
@@ -275,6 +275,14 @@ class PlacedOrderOut(OrderOut):
 
 class PaymentConfirmIn(BaseModel):
     session_id: str = Field(min_length=1, max_length=255)
+
+
+class PaymentConfirmedOut(BaseModel):
+    """What the confirmed payment was for: `order`, or `premium_card` with its end date."""
+
+    purpose: PaymentPurpose
+    order: OrderOut | None = None
+    premium_until: datetime | None = None
 
 
 class PaymentSessionOut(BaseModel):

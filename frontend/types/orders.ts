@@ -173,3 +173,9 @@ export interface ReorderResult {
   skipped: { name: string; reason: string }[];
   price_changes: { name: string; old_price: number; new_price: number }[];
 }
+
+export interface PaymentConfirmed {
+  purpose: "order" | "premium_card";
+  order: Order | null;
+  premium_until: string | null;
+}

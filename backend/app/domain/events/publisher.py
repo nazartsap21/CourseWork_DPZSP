@@ -20,10 +20,11 @@ from typing import ClassVar
 
 @dataclass(frozen=True)
 class OrderStatusChanged:
-    """`old_status` is None when the order was just created."""
+    """`old_status` is None when the order was just created. `total` is kopiyky."""
 
     order_id: int
     customer_id: int
+    total: int
     restaurant_name: str
     is_pickup: bool
     old_status: str | None

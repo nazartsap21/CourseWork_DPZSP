@@ -43,7 +43,7 @@ class StripeGateway(PaymentGateway):
                     # Stripe substitutes {CHECKOUT_SESSION_ID} itself.
                     "success_url": request.success_url,
                     "cancel_url": request.cancel_url,
-                    "metadata": {"order_id": str(request.order_id)},
+                    "metadata": {"reference": request.reference},
                 }
             )
         except stripe.StripeError as error:

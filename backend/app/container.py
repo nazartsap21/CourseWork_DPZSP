@@ -20,7 +20,11 @@ from .domain.delivery.strategies import (
     PickupDelivery,
     StandardDelivery,
 )
-from .domain.events.observers import NotificationObserver, StatusHistoryObserver
+from .domain.events.observers import (
+    LoyaltyObserver,
+    NotificationObserver,
+    StatusHistoryObserver,
+)
 from .domain.events.publisher import OrderEventPublisher
 from .domain.orders.commands import CommandInvoker, LoggerCommandLog
 from .domain.orders.validation import build_order_validation_chain
@@ -44,6 +48,7 @@ from .services.catalog_service import CatalogService
 from .services.checkout_facade import CheckoutFacade
 from .services.courier_service import CourierService
 from .services.favorites_service import FavoritesService
+from .services.loyalty_service import LoyaltyService
 from .services.notification_service import NotificationService
 from .services.order_actions import OrderActions
 from .services.order_service import OrderService
@@ -65,6 +70,7 @@ class Services:
     courier: CourierService
     favorites: FavoritesService
     order_actions: OrderActions
+    loyalty: LoyaltyService
 
 
 def register_order_observers(publisher: OrderEventPublisher) -> None:
@@ -73,6 +79,9 @@ def register_order_observers(publisher: OrderEventPublisher) -> None:
     publisher.reset()
     publisher.subscribe(StatusHistoryObserver(StatusHistoryRepository(db.session)))
     publisher.subscribe(NotificationObserver(NotificationRepository(db.session)))
+    publisher.subscribe(
+        LoyaltyObserver(LoyaltyRepository(db.session), NotificationRepository(db.session))
+    )
 
 
 def build_services(config: Config) -> Services:
@@ -109,11 +118,13 @@ def build_services(config: Config) -> Services:
         orders,
         ReturnUrls.for_frontend(config["FRONTEND_URL"]),
         events,
+        loyalty,
     )
     catalog = CatalogService(restaurants, dishes, CuisineRepository(session))
     order_service = OrderService(orders, events, routes, loyalty, gateways)
+    users = UserRepository(session)
     return Services(
-        auth=AuthService(UserRepository(session)),
+        auth=AuthService(users),
         catalog=catalog,
         quotes=quotes,
         checkout=CheckoutFacade(quotes, orders, loyalty, payments, events),
@@ -122,6 +133,7 @@ def build_services(config: Config) -> Services:
         notifications=NotificationService(NotificationRepository(session)),
         courier=CourierService(orders),
         favorites=FavoritesService(FavoriteRepository(session), restaurants, catalog),
+        loyalty=LoyaltyService(loyalty, users, payments),
         order_actions=OrderActions(
             CommandInvoker(LoggerCommandLog()), order_service, past_orders=orders, menu=dishes
         ),

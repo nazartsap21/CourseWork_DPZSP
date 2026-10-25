@@ -19,6 +19,7 @@ def publish_status(
         OrderStatusChanged(
             order_id=order.id,
             customer_id=order.customer_id,
+            total=order.total,
             restaurant_name=order.restaurant.name,
             is_pickup=order.delivery_method == DeliveryMethod.PICKUP,
             old_status=old_status,

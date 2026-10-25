@@ -7,11 +7,13 @@ import useSWR from "swr";
 
 import { ApiError, api } from "@/lib/api";
 import { formatPrice } from "@/lib/format";
-import type { Order } from "@/types/orders";
+import type { PaymentConfirmed } from "@/types/orders";
 
 type ConfirmKey = readonly [path: "/payments/confirm", sessionId: string];
 
-const confirmPayment = ([path, sessionId]: ConfirmKey) => api.post<Order>(path, { session_id: sessionId });
+const confirmPayment = ([path, sessionId]: ConfirmKey) => api.post<PaymentConfirmed>(path, { session_id: sessionId });
+
+const dateFormat = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long" });
 
 /**
  * Return page after paying. The redirect alone proves nothing, so the backend
@@ -20,7 +22,7 @@ const confirmPayment = ([path, sessionId]: ConfirmKey) => api.post<Order>(path, 
  */
 export function PaymentSuccess() {
   const sessionId = useSearchParams().get("session_id");
-  const { data: order, error } = useSWR<Order, ApiError, ConfirmKey | null>(
+  const { data, error } = useSWR<PaymentConfirmed, ApiError, ConfirmKey | null>(
     sessionId ? ["/payments/confirm", sessionId] : null,
     confirmPayment,
     { revalidateOnFocus: false, revalidateIfStale: false, shouldRetryOnError: false },
@@ -44,7 +46,7 @@ export function PaymentSuccess() {
     );
   }
 
-  if (!order) {
+  if (!data) {
     return (
       <main className="mx-auto w-full max-w-xl flex-1 px-4 py-24 text-center" aria-busy>
         <p className="font-serif text-3xl text-ink">Checking your payment…</p>
@@ -53,6 +55,26 @@ export function PaymentSuccess() {
     );
   }
 
+  if (data.purpose === "premium_card" || !data.order) {
+    return (
+      <main className="mx-auto w-full max-w-xl flex-1 px-4 py-20 text-center">
+        <CheckCircle2 aria-hidden className="mx-auto h-10 w-10 text-sage" />
+        <h1 className="mt-4 font-serif text-4xl text-ink">Premium card is active</h1>
+        <p className="mt-3 text-muted-ink">
+          Free delivery on every order
+          {data.premium_until ? ` until ${dateFormat.format(new Date(data.premium_until))}` : ""}.
+        </p>
+        <Link
+          href="/account"
+          className="mt-6 inline-block rounded-full bg-accent px-6 py-3 font-semibold text-white hover:bg-accent-strong"
+        >
+          Back to your account
+        </Link>
+      </main>
+    );
+  }
+
+  const order = data.order;
   return (
     <main className="mx-auto w-full max-w-xl flex-1 px-4 py-20 text-center">
       <CheckCircle2 aria-hidden className="mx-auto h-10 w-10 text-sage" />
