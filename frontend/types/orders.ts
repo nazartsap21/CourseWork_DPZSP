@@ -119,6 +119,8 @@ export interface Order {
   review: OwnReview | null;
   /** Own delivered order without a review yet. */
   can_review: boolean;
+  /** Name and phone; shown to the customer, admins and the assigned courier. */
+  customer: { name: string; phone: string | null } | null;
 }
 
 export interface PlacedOrder extends Order {

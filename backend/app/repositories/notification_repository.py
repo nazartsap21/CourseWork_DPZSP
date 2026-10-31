@@ -47,3 +47,10 @@ class NotificationRepository(SqlAlchemyRepository):
             .where(Notification.user_id == user_id, Notification.is_read.is_(False))
             .values(is_read=True)
         )
+
+    def notify_many(self, user_ids: list[int], type: str, message: str) -> None:
+        """One notification per user, e.g. an admin promo to all customers."""
+        self._session.add_all(
+            Notification(user_id=user_id, type=NotificationType(type), message=message)
+            for user_id in user_ids
+        )

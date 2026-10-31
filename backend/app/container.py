@@ -45,6 +45,7 @@ from .repositories import (
     UserRepository,
 )
 from .services.admin_catalog_service import AdminCatalogService
+from .services.admin_operations_service import AdminOperationsService
 from .services.auth_service import AuthService
 from .services.catalog_service import CatalogService
 from .services.checkout_facade import CheckoutFacade
@@ -76,6 +77,7 @@ class Services:
     loyalty: LoyaltyService
     reviews: ReviewService
     admin_catalog: AdminCatalogService
+    admin_operations: AdminOperationsService
 
 
 def register_order_observers(publisher: OrderEventPublisher) -> None:
@@ -142,6 +144,9 @@ def build_services(config: Config) -> Services:
         loyalty=LoyaltyService(loyalty, users, payments),
         reviews=ReviewService(ReviewRepository(session), orders, restaurants),
         admin_catalog=AdminCatalogService(restaurants, dishes, cuisines),
+        admin_operations=AdminOperationsService(
+            users, orders, loyalty, NotificationRepository(session)
+        ),
         order_actions=OrderActions(
             CommandInvoker(LoggerCommandLog()), order_service, past_orders=orders, menu=dishes
         ),

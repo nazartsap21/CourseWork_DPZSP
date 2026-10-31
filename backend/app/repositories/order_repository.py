@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from sqlalchemy import Select, func, select
 from sqlalchemy.orm import selectinload
 
@@ -146,3 +148,70 @@ class OrderRepository(SqlAlchemyRepository):
                 for item in order.items
             ],
         )
+
+    def admin_page(
+        self,
+        status: str | None,
+        restaurant_id: int | None,
+        created_from: datetime | None,
+        created_to: datetime | None,
+        page: int,
+        per_page: int,
+    ) -> PageResult[Order]:
+        """All orders for the admin board, newest first, with the given filters."""
+        conditions = []
+        if status is not None:
+            conditions.append(Order.status == OrderStatus(status))
+        if restaurant_id is not None:
+            conditions.append(Order.restaurant_id == restaurant_id)
+        if created_from is not None:
+            conditions.append(Order.created_at >= created_from)
+        if created_to is not None:
+            conditions.append(Order.created_at < created_to)
+        total = self._session.scalar(select(func.count(Order.id)).where(*conditions)) or 0
+        items = list(
+            self._session.scalars(
+                select(Order)
+                .where(*conditions)
+                .options(
+                    selectinload(Order.restaurant),
+                    selectinload(Order.customer),
+                    selectinload(Order.courier),
+                )
+                .order_by(Order.created_at.desc(), Order.id.desc())
+                .offset((page - 1) * per_page)
+                .limit(per_page)
+            )
+        )
+        return PageResult(items=items, total=total, page=page, per_page=per_page)
+
+    def active_order_ids_by_courier(self, courier_ids: list[int]) -> dict[int, list[int]]:
+        """Taken or on-the-way orders per courier."""
+        if not courier_ids:
+            return {}
+        rows = self._session.execute(
+            select(Order.courier_id, Order.id)
+            .where(
+                Order.courier_id.in_(courier_ids),
+                Order.status.in_([OrderStatus.READY_FOR_PICKUP, OrderStatus.DELIVERING]),
+            )
+            .order_by(Order.id)
+        ).all()
+        result: dict[int, list[int]] = {}
+        for courier_id, order_id in rows:
+            result.setdefault(courier_id, []).append(order_id)
+        return result
+
+    def delivered_count_by_courier(self, courier_ids: list[int], since: datetime) -> dict[int, int]:
+        if not courier_ids:
+            return {}
+        rows = self._session.execute(
+            select(Order.courier_id, func.count(Order.id))
+            .where(
+                Order.courier_id.in_(courier_ids),
+                Order.status == OrderStatus.DELIVERED,
+                Order.updated_at >= since,
+            )
+            .group_by(Order.courier_id)
+        ).all()
+        return {courier_id: int(count) for courier_id, count in rows}

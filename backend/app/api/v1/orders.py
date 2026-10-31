@@ -147,6 +147,9 @@ def _order_detail(order: Order, actor: Actor) -> dict:
     ]
     detail.can_cancel = get_services().orders.can_cancel(order, actor)
     detail.can_review = actor.role == UserRole.CUSTOMER and can_review(order, actor.user_id)
+    # Contact details only for people who need them: the customer, admins, the assigned courier.
+    if actor.role == UserRole.COURIER and order.courier_id != actor.user_id:
+        detail.customer = None
     return detail.model_dump(mode="json")
 
 

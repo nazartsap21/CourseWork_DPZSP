@@ -158,6 +158,13 @@ class OrderRestaurantOut(BaseModel):
     lng: float
 
 
+class CustomerContactOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    name: str
+    phone: str | None
+
+
 class OrderOut(BaseModel):
     """Money fields are integer kopiyky."""
 
@@ -189,13 +196,8 @@ class OrderOut(BaseModel):
     review: OwnReviewOut | None = None
     # Own delivered order that has no review yet.
     can_review: bool = False
-
-
-class CustomerContactOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    name: str
-    phone: str | None
+    # Hidden from couriers until the order is theirs (see the order detail endpoint).
+    customer: CustomerContactOut | None = None
 
 
 class CourierOrderOut(BaseModel):

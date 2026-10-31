@@ -1,6 +1,7 @@
 from flask import Blueprint
 
 from .admin_catalog import admin_catalog_bp
+from .admin_operations import admin_operations_bp
 from .auth import auth_bp
 from .catalog import catalog_bp
 from .courier import courier_bp
@@ -22,3 +23,4 @@ api_v1_bp.register_blueprint(courier_bp)
 api_v1_bp.register_blueprint(favorites_bp)
 api_v1_bp.register_blueprint(loyalty_bp)
 api_v1_bp.register_blueprint(admin_catalog_bp)
+api_v1_bp.register_blueprint(admin_operations_bp)
