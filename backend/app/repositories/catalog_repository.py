@@ -6,7 +6,7 @@ from sqlalchemy.orm import selectinload
 from ..domain.catalog.queries import RestaurantQuery, RestaurantSort
 from ..domain.catalog.rules import CATALOG_TRAVEL_MINUTES, price_level_range
 from ..domain.orders.builder import DishSnapshot
-from ..models import Cuisine, Dish, Restaurant, Review, restaurant_cuisines
+from ..models import Cuisine, Dish, Order, Restaurant, Review, restaurant_cuisines
 from .base import PageResult, SqlAlchemyRepository
 
 
@@ -131,6 +131,49 @@ class RestaurantRepository(SqlAlchemyRepository):
         )
         return [self._to_stats(row) for row in self._session.execute(stmt).all()]
 
+    def admin_page(
+        self, query: str, active: bool | None, page: int, per_page: int
+    ) -> PageResult[tuple[Restaurant, int]]:
+        """All restaurants (active or not) with their dish counts, for the admin table."""
+        dish_counts = (
+            select(Dish.restaurant_id, func.count(Dish.id).label("dish_count"))
+            .group_by(Dish.restaurant_id)
+            .subquery("dish_counts")
+        )
+        stmt = (
+            select(Restaurant, func.coalesce(dish_counts.c.dish_count, 0))
+            .outerjoin(dish_counts, dish_counts.c.restaurant_id == Restaurant.id)
+            .options(selectinload(Restaurant.cuisines))
+        )
+        if query:
+            stmt = stmt.where(Restaurant.name.ilike(f"%{query}%"))
+        if active is not None:
+            stmt = stmt.where(Restaurant.is_active.is_(active))
+        total = self._session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+        rows = self._session.execute(
+            stmt.order_by(Restaurant.name).offset((page - 1) * per_page).limit(per_page)
+        ).all()
+        return PageResult(
+            items=[(restaurant, int(count)) for restaurant, count in rows],
+            total=total,
+            page=page,
+            per_page=per_page,
+        )
+
+    def name_taken(self, name: str, exclude_id: int | None = None) -> bool:
+        stmt = select(Restaurant.id).where(func.lower(Restaurant.name) == name.lower())
+        if exclude_id is not None:
+            stmt = stmt.where(Restaurant.id != exclude_id)
+        return self._session.scalar(stmt) is not None
+
+    def has_orders(self, restaurant_id: int) -> bool:
+        return (
+            self._session.scalar(
+                select(Order.id).where(Order.restaurant_id == restaurant_id).limit(1)
+            )
+            is not None
+        )
+
     def get_by_id(self, restaurant_id: int) -> Restaurant | None:
         """Active or not: ordering reports an inactive restaurant as a validation error."""
         return self._session.get(Restaurant, restaurant_id)
@@ -155,6 +198,17 @@ class DishRepository(SqlAlchemyRepository):
             )
         )
 
+    def get(self, dish_id: int) -> Dish | None:
+        return self._session.get(Dish, dish_id)
+
+    def name_taken(self, restaurant_id: int, name: str, exclude_id: int | None = None) -> bool:
+        stmt = select(Dish.id).where(
+            Dish.restaurant_id == restaurant_id, func.lower(Dish.name) == name.lower()
+        )
+        if exclude_id is not None:
+            stmt = stmt.where(Dish.id != exclude_id)
+        return self._session.scalar(stmt) is not None
+
     def dish_snapshots(self, restaurant_id: int, dish_ids: list[int]) -> list[DishSnapshot]:
         """Implements `CurrentMenu` for `ReorderCommand`."""
         return [
@@ -171,6 +225,30 @@ class DishRepository(SqlAlchemyRepository):
 
 
 class CuisineRepository(SqlAlchemyRepository):
+    def get(self, cuisine_id: int) -> Cuisine | None:
+        return self._session.get(Cuisine, cuisine_id)
+
+    def get_many(self, cuisine_ids: list[int]) -> list[Cuisine]:
+        if not cuisine_ids:
+            return []
+        return list(self._session.scalars(select(Cuisine).where(Cuisine.id.in_(cuisine_ids))))
+
+    def name_taken(self, name: str, exclude_id: int | None = None) -> bool:
+        stmt = select(Cuisine.id).where(func.lower(Cuisine.name) == name.lower())
+        if exclude_id is not None:
+            stmt = stmt.where(Cuisine.id != exclude_id)
+        return self._session.scalar(stmt) is not None
+
+    def list_with_all_counts(self) -> list[CuisineWithCount]:
+        """Every cuisine with the number of restaurants using it, active or not."""
+        rows = self._session.execute(
+            select(Cuisine, func.count(restaurant_cuisines.c.restaurant_id))
+            .outerjoin(restaurant_cuisines, restaurant_cuisines.c.cuisine_id == Cuisine.id)
+            .group_by(Cuisine.id)
+            .order_by(Cuisine.name)
+        ).all()
+        return [CuisineWithCount(cuisine, int(count)) for cuisine, count in rows]
+
     def list_with_counts(self) -> list[CuisineWithCount]:
         active_count = func.count(Restaurant.id).filter(Restaurant.is_active.is_(True))
         rows = self._session.execute(
