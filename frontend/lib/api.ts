@@ -30,8 +30,8 @@ function isErrorBody(value: unknown): value is ApiErrorBody {
   return typeof error === "object" && error !== null && "code" in error && "message" in error;
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const headers: Record<string, string> = { Accept: "application/json" };
+async function send(method: string, path: string, body?: unknown, accept = "application/json"): Promise<Response> {
+  const headers: Record<string, string> = { Accept: accept };
   const token = readToken();
   if (token) {
     headers.Authorization = `Bearer ${token}`;
@@ -50,19 +50,23 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   } catch {
     throw new ApiError(0, "NETWORK_ERROR", "Can't reach the server. Check your connection.");
   }
-
-  if (response.status === 204) {
-    return undefined as T;
-  }
-  const data: unknown = await response.json().catch(() => null);
   if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
     if (isErrorBody(data)) {
       const { code, message, details } = data.error;
       throw new ApiError(response.status, code, message, details);
     }
     throw new ApiError(response.status, "UNKNOWN_ERROR", "Something went wrong. Try again.");
   }
-  return data as T;
+  return response;
+}
+
+async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const response = await send(method, path, body);
+  if (response.status === 204) {
+    return undefined as T;
+  }
+  return (await response.json()) as T;
 }
 
 export const api = {
@@ -71,6 +75,8 @@ export const api = {
   put: <T>(path: string, body?: unknown) => request<T>("PUT", path, body),
   patch: <T>(path: string, body?: unknown) => request<T>("PATCH", path, body),
   delete: <T = void>(path: string) => request<T>("DELETE", path),
+  /** A file response (e.g. a CSV report); a plain link can't send the JWT header. */
+  download: async (path: string) => (await send("GET", path, undefined, "*/*")).blob(),
 };
 
 /** Default SWR fetcher: the SWR key is the API path. */

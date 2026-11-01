@@ -171,10 +171,13 @@ def status_timeline(spec: OrderSeed, prep_minutes: int) -> list[tuple[OrderStatu
     steps += [(OrderStatus.PREPARING, 3), (OrderStatus.READY_FOR_PICKUP, 3 + prep_minutes)]
     if spec["delivery_method"] == DeliveryMethod.PICKUP:
         return [*steps, (OrderStatus.DELIVERED, 15 + prep_minutes)]
+    # The ride varies between orders, so some arrive within the ETA (prep + 25 min) and
+    # some late, which gives the courier performance report something to show.
+    ride_minutes = 14 + spec["days_ago"] % 12
     return [
         *steps,
         (OrderStatus.DELIVERING, 6 + prep_minutes),
-        (OrderStatus.DELIVERED, 30 + prep_minutes),
+        (OrderStatus.DELIVERED, 6 + prep_minutes + ride_minutes),
     ]
 
 

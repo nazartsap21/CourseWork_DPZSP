@@ -1,10 +1,9 @@
 "use client";
 
-import { BadgePercent, Bike, ClipboardList, Megaphone, Store, Tags } from "lucide-react";
+import { BadgePercent, Bike, ChartColumn, ClipboardList, Megaphone, Store, Tags } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-// Sections are added here as the admin area grows (orders, couriers, loyalty, reports).
 const SECTIONS = [
   { href: "/admin/orders", label: "Orders", icon: ClipboardList },
   { href: "/admin/restaurants", label: "Restaurants", icon: Store },
@@ -12,6 +11,7 @@ const SECTIONS = [
   { href: "/admin/couriers", label: "Couriers", icon: Bike },
   { href: "/admin/loyalty", label: "Loyalty", icon: BadgePercent },
   { href: "/admin/promotions", label: "Promotions", icon: Megaphone },
+  { href: "/admin/reports", label: "Reports", icon: ChartColumn },
 ] as const;
 
 /** Admin frame: section navigation (sidebar on desktop, tabs on phones) and the page. */

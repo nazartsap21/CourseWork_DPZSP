@@ -11,6 +11,7 @@ from .loyalty_repository import LoyaltyRepository
 from .notification_repository import NotificationRepository
 from .order_repository import OrderRepository
 from .payment_repository import PaymentRepository
+from .report_repository import ReportRepository
 from .review_repository import ReviewRepository
 from .status_history_repository import StatusHistoryRepository
 from .user_repository import UserRepository
@@ -25,6 +26,7 @@ __all__ = [
     "OrderRepository",
     "PaymentRepository",
     "PageResult",
+    "ReportRepository",
     "RestaurantRepository",
     "RestaurantStats",
     "ReviewRepository",

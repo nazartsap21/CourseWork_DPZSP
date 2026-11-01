@@ -30,6 +30,11 @@ from .domain.orders.commands import CommandInvoker, LoggerCommandLog
 from .domain.orders.validation import build_order_validation_chain
 from .domain.payments.factory import PaymentGatewayFactory
 from .domain.payments.stripe_adapter import StripeGateway
+from .domain.reports.reports import (
+    CourierPerformanceReport,
+    PopularDishesReport,
+    SalesByRestaurantReport,
+)
 from .extensions import db
 from .repositories import (
     CuisineRepository,
@@ -39,6 +44,7 @@ from .repositories import (
     NotificationRepository,
     OrderRepository,
     PaymentRepository,
+    ReportRepository,
     RestaurantRepository,
     ReviewRepository,
     StatusHistoryRepository,
@@ -57,6 +63,7 @@ from .services.order_actions import OrderActions
 from .services.order_service import OrderService
 from .services.payment_service import PaymentService, ReturnUrls
 from .services.quote_service import OrderQuoteService
+from .services.report_service import ReportService
 from .services.review_service import ReviewService
 
 EXTENSION_KEY = "forkful_services"
@@ -78,6 +85,7 @@ class Services:
     reviews: ReviewService
     admin_catalog: AdminCatalogService
     admin_operations: AdminOperationsService
+    reports: ReportService
 
 
 def register_order_observers(publisher: OrderEventPublisher) -> None:
@@ -131,6 +139,7 @@ def build_services(config: Config) -> Services:
     catalog = CatalogService(restaurants, dishes, cuisines)
     order_service = OrderService(orders, events, routes, loyalty, gateways)
     users = UserRepository(session)
+    report_data = ReportRepository(session)
     return Services(
         auth=AuthService(users),
         catalog=catalog,
@@ -146,6 +155,13 @@ def build_services(config: Config) -> Services:
         admin_catalog=AdminCatalogService(restaurants, dishes, cuisines),
         admin_operations=AdminOperationsService(
             users, orders, loyalty, NotificationRepository(session)
+        ),
+        reports=ReportService(
+            [
+                SalesByRestaurantReport(report_data),
+                PopularDishesReport(report_data),
+                CourierPerformanceReport(report_data),
+            ]
         ),
         order_actions=OrderActions(
             CommandInvoker(LoggerCommandLog()), order_service, past_orders=orders, menu=dishes
