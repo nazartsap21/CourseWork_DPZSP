@@ -1,0 +1,209 @@
+@startuml er-diagram
+title Forkful — database schema (PostgreSQL)
+skinparam shadowing false
+skinparam linetype ortho
+hide circle
+hide empty methods
+
+' Money columns are integer kopiyky (1 UAH = 100). Enum columns are VARCHAR.
+
+entity users {
+  * id : integer <<PK>>
+  --
+  * email : varchar(255) <<unique>>
+  * password_hash : varchar(255)
+  * name : varchar(120)
+  phone : varchar(32)
+  * role : varchar  (customer | courier | admin)
+  * created_at : timestamptz
+}
+
+entity cuisines {
+  * id : integer <<PK>>
+  --
+  * name : varchar(64) <<unique>>
+}
+
+entity restaurant_cuisines {
+  * restaurant_id : integer <<PK, FK>>
+  * cuisine_id : integer <<PK, FK>>
+}
+
+entity restaurants {
+  * id : integer <<PK>>
+  --
+  * name : varchar(120) <<unique>>
+  description : text
+  * address : varchar(255)
+  * lat : float
+  * lng : float
+  * avg_prep_minutes : integer
+  * min_order_amount : integer
+  * is_active : boolean
+  image_url : varchar(500)
+  * created_at : timestamptz
+}
+
+entity dishes {
+  * id : integer <<PK>>
+  --
+  * restaurant_id : integer <<FK>>
+  * name : varchar(120)  (unique per restaurant)
+  description : text
+  * price : integer
+  * category : varchar(64)
+  * is_available : boolean
+  image_url : varchar(500)
+}
+
+entity orders {
+  * id : integer <<PK>>
+  --
+  * customer_id : integer <<FK>>
+  * restaurant_id : integer <<FK>>
+  courier_id : integer <<FK>>
+  * status : varchar
+  * delivery_method : varchar  (standard | express | pickup)
+  delivery_address : varchar(255)
+  delivery_note : varchar(255)
+  delivery_lat : float
+  delivery_lng : float
+  * subtotal : integer
+  * delivery_fee : integer
+  * discount : integer
+  * bonus_points_used : integer
+  * total : integer
+  * payment_method : varchar  (stripe | cash | mock)
+  * payment_status : varchar  (pending | paid | failed | refunded)
+  route : json  (polyline [[lat, lng], ...])
+  picked_up_at : timestamptz
+  estimated_delivery_minutes : integer
+  * created_at : timestamptz
+  * updated_at : timestamptz
+}
+
+entity order_items {
+  * id : integer <<PK>>
+  --
+  * order_id : integer <<FK>>
+  dish_id : integer <<FK>>  (SET NULL)
+  * name : varchar(120)  (snapshot)
+  * price : integer  (snapshot)
+  * quantity : integer
+}
+
+entity order_status_history {
+  * id : integer <<PK>>
+  --
+  * order_id : integer <<FK>>
+  * status : varchar
+  * changed_at : timestamptz
+  changed_by_id : integer <<FK>>
+}
+
+entity payments {
+  * id : integer <<PK>>
+  --
+  * customer_id : integer <<FK>>
+  order_id : integer <<FK>>  (null for premium card)
+  * purpose : varchar  (order | premium_card)
+  * provider : varchar
+  external_id : varchar(255) <<unique>>
+  * amount : integer
+  * status : varchar
+  * created_at : timestamptz
+  paid_at : timestamptz
+}
+
+entity reviews {
+  * id : integer <<PK>>
+  --
+  * order_id : integer <<FK, unique>>
+  * restaurant_id : integer <<FK>>
+  * customer_id : integer <<FK>>
+  * rating : integer  (1..5)
+  text : text
+  * created_at : timestamptz
+}
+
+entity favorites {
+  * id : integer <<PK>>
+  --
+  * customer_id : integer <<FK>>
+  * restaurant_id : integer <<FK>>
+  (customer_id, restaurant_id) unique
+  * created_at : timestamptz
+}
+
+entity notifications {
+  * id : integer <<PK>>
+  --
+  * user_id : integer <<FK>>
+  * type : varchar  (order_status | bonus_points | promo)
+  * message : varchar(500)
+  order_id : integer <<FK>>
+  * is_read : boolean
+  * created_at : timestamptz
+}
+
+entity loyalty_accounts {
+  * id : integer <<PK>>
+  --
+  * customer_id : integer <<FK, unique>>
+  * points_balance : integer  (>= 0)
+  * card_type : varchar  (standard | premium)
+  premium_until : timestamptz
+  * completed_orders_count : integer
+}
+
+entity bonus_transactions {
+  * id : integer <<PK>>
+  --
+  * account_id : integer <<FK>>
+  order_id : integer <<FK>>
+  * delta : integer
+  * reason : varchar  (order_accrual | order_redemption | ...)
+  * created_at : timestamptz
+}
+
+entity loyalty_settings {
+  * id : integer <<PK>>  (always 1)
+  --
+  * points_per_100_uah : integer
+  * point_value : integer
+  * max_points_redemption_percent : integer
+  * regular_customer_threshold : integer
+  * regular_customer_discount_percent : integer
+  * premium_card_price : integer
+  * premium_card_days : integer
+}
+
+restaurants ||--o{ restaurant_cuisines
+cuisines ||--o{ restaurant_cuisines
+restaurants ||--o{ dishes
+
+users ||--o{ orders : places
+users |o--o{ orders : delivers
+restaurants ||--o{ orders
+orders ||--|{ order_items
+dishes |o--o{ order_items
+orders ||--|{ order_status_history
+users |o--o{ order_status_history
+
+users ||--o{ payments
+orders |o--o{ payments
+
+orders ||--o| reviews
+restaurants ||--o{ reviews
+users ||--o{ reviews
+
+users ||--o{ favorites
+restaurants ||--o{ favorites
+
+users ||--o{ notifications
+orders |o--o{ notifications
+
+users ||--o| loyalty_accounts
+loyalty_accounts ||--o{ bonus_transactions
+orders |o--o{ bonus_transactions
+@enduml

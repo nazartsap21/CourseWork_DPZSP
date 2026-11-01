@@ -1,0 +1,109 @@
+@startuml use-case
+title Forkful — use cases
+left to right direction
+skinparam shadowing false
+skinparam actorStyle awesome
+skinparam packageStyle rectangle
+skinparam usecase {
+  BackgroundColor #FFF8F0
+  BorderColor #8A6D5A
+}
+
+actor Guest
+actor Customer
+actor Courier
+actor Admin
+actor "Stripe" as Stripe <<external>>
+actor "Routing service\n(OSRM)" as Osrm <<external>>
+
+Guest <|-- Customer
+
+rectangle "Forkful" {
+  package "Catalog" {
+    usecase "Browse restaurants\nand menus" as UC_Browse
+    usecase "Filter and sort\nthe catalog" as UC_Filter
+    usecase "Read reviews" as UC_Reviews
+    usecase "Register / sign in" as UC_Auth
+  }
+
+  package "Ordering" {
+    usecase "Build a cart" as UC_Cart
+    usecase "Get a price quote" as UC_Quote
+    usecase "Place an order" as UC_Order
+    usecase "Choose delivery method\nand point on the map" as UC_Delivery
+    usecase "Pay online" as UC_PayOnline
+    usecase "Redeem bonus points" as UC_Redeem
+    usecase "Track the order" as UC_Track
+    usecase "Cancel an order" as UC_Cancel
+    usecase "Reorder in one click" as UC_Reorder
+  }
+
+  package "Personal account" {
+    usecase "View order history" as UC_History
+    usecase "Review a delivered order" as UC_Review
+    usecase "Manage favorites" as UC_Fav
+    usecase "Buy a premium card" as UC_Premium
+    usecase "Read notifications" as UC_Notif
+    usecase "Edit profile" as UC_Profile
+  }
+
+  package "Courier workspace" {
+    usecase "Take a ready order" as UC_Take
+    usecase "Mark picked up" as UC_PickUp
+    usecase "Build the route" as UC_Route
+    usecase "Mark delivered" as UC_Deliver
+  }
+
+  package "Administration" {
+    usecase "Manage restaurants,\ndishes and cuisines" as UC_Catalog
+    usecase "Manage couriers" as UC_Couriers
+    usecase "Advance order status" as UC_Advance
+    usecase "Edit loyalty settings" as UC_Loyalty
+    usecase "Send a promotion" as UC_Promo
+    usecase "View reports /\nexport CSV" as UC_Reports
+  }
+}
+
+Guest --> UC_Browse
+Guest --> UC_Reviews
+Guest --> UC_Auth
+Guest --> UC_Cart
+Guest --> UC_Quote
+UC_Browse <.. UC_Filter : <<extend>>
+
+Customer --> UC_Order
+Customer --> UC_Track
+Customer --> UC_Cancel
+Customer --> UC_Reorder
+Customer --> UC_History
+Customer --> UC_Review
+Customer --> UC_Fav
+Customer --> UC_Premium
+Customer --> UC_Notif
+Customer --> UC_Profile
+
+UC_Order ..> UC_Delivery : <<include>>
+UC_Order ..> UC_Quote : <<include>>
+UC_Order <.. UC_PayOnline : <<extend>>
+UC_Order <.. UC_Redeem : <<extend>>
+UC_Premium ..> UC_PayOnline : <<include>>
+UC_Reorder ..> UC_Cart : <<include>>
+
+Courier --> UC_Take
+Courier --> UC_PickUp
+Courier --> UC_Deliver
+Courier --> UC_Notif
+UC_PickUp ..> UC_Route : <<include>>
+
+Admin --> UC_Catalog
+Admin --> UC_Couriers
+Admin --> UC_Advance
+Admin --> UC_Cancel
+Admin --> UC_Loyalty
+Admin --> UC_Promo
+Admin --> UC_Reports
+
+UC_PayOnline --> Stripe
+UC_Cancel --> Stripe : refund
+UC_Route --> Osrm
+@enduml

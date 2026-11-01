@@ -1,7 +1,7 @@
 """Factory Method: creates the gateway for a payment method.
 
 Callers ask for "the gateway for `stripe`" and get a `PaymentGateway`; which
-class that is depends on configuration. Without a Stripe key, card payments
+class that is depends on the configuration. Without a Stripe key, card payments
 are served by `MockGateway`, so the project runs end to end without secrets.
 """
 

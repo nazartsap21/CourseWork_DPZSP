@@ -2,7 +2,7 @@
 
 When an order changes status, the code that changed it publishes one
 `OrderStatusChanged` event and doesn't know who reacts: history logging,
-customer notifications and (later) loyalty points are observers that
+customer notifications and loyalty points are observers that
 subscribe once in the app factory.
 
 Why a Singleton: every service that changes orders (checkout, payments, staff

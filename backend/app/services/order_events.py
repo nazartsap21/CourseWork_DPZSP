@@ -1,6 +1,6 @@
 """The one way services change an order's status: apply it, then publish it.
 
-Observers (history, notifications, later loyalty) react to the event, so the
+Observers (history, notifications, loyalty) react to the event, so the
 services that move orders stay unaware of them.
 """
 

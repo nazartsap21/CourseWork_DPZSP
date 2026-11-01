@@ -1,0 +1,382 @@
+@startuml class-diagram
+title Forkful — class diagram (backend: api → services → domain → repositories → models)
+!include patterns-palette.iuml
+
+' ===================================================================== api
+package "api.v1 (Flask blueprints)" as api $checkout $lifecycle {
+  class orders_bp <<Controller>> $checkout $lifecycle {
+    POST /orders/quote
+    POST /orders
+    PATCH /orders/{id}/status
+    POST /orders/{id}/reorder
+    POST /orders/{id}/cancel
+  }
+  class payments_bp <<Controller>> $checkout {
+    POST /payments/confirm
+  }
+  class reports_bp <<Controller>> $lifecycle {
+    GET /admin/reports/{key}
+  }
+}
+
+' ================================================================ services
+package "services" $checkout $lifecycle {
+  class CheckoutFacade <<Facade>> $checkout $Facade {
+    + place_order(request, customer_id) : CheckoutResult
+    - _spend_points(customer_id, order)
+  }
+  class OrderQuoteService $checkout {
+    + quote(request, customer_id) : Quote
+    - _build_draft(request, customer_id) : OrderDraft
+  }
+  class OrderService $lifecycle {
+    + get_order(order_id, actor) : Order
+    + available_transitions(order, actor) : list[str]
+    + change_status(order_id, target, actor) : Order
+    + cancel(order_id, user_id, role) : Order
+    + tracking(order_id, actor) : Tracking
+  }
+  class PaymentService $checkout {
+    + gateway_for(method) : PaymentGateway
+    + start(order, gateway) : str?
+    + confirm(external_id, customer_id) : PaymentConfirmation
+  }
+  class OrderActions <<Command client>> $lifecycle $Command {
+    + reorder(order_id, customer_id) : ReorderResult
+    + cancel(order_id, actor) : Order
+  }
+  class ReportService $lifecycle {
+    + available() : list[ReportGenerator]
+    + generate(key, date_from, date_to) : Report
+    + generate_csv(key, date_from, date_to) : str
+  }
+  class order_events <<module>> $lifecycle {
+    + transition(publisher, order, status, by)
+    + publish_status(publisher, order, old, by)
+  }
+}
+
+' ================================================================== domain
+package "domain" $checkout $lifecycle {
+  package "orders" $checkout $lifecycle {
+    class OrderBuilder <<Builder>> $checkout $Builder {
+      + for_restaurant(snapshot) : OrderBuilder
+      + add_item(dish, quantity) : OrderBuilder
+      + with_delivery(method, point, address, note) : OrderBuilder
+      + with_payment(method) : OrderBuilder
+      + redeem_points(points) : OrderBuilder
+      + build() : OrderDraft
+    }
+    class OrderDraft <<Product>> $checkout $Builder {
+      restaurant : RestaurantSnapshot
+      items : list[DraftItem]
+      delivery : DeliveryDetails
+      + subtotal() : int
+    }
+    class DraftItem $checkout $Builder {
+      dish : DishSnapshot
+      quantity : int
+      + line_total() : int
+    }
+    OrderBuilder ..> OrderDraft : creates
+    OrderDraft *-- "1..*" DraftItem
+
+    abstract class OrderValidator <<Handler>> $checkout $Chain {
+      - _next : OrderValidator?
+      + set_next(handler) : OrderValidator
+      + validate(context)
+      # {abstract} check(context)
+    }
+    class RestaurantActiveCheck $checkout $Chain
+    class ItemsAvailableCheck $checkout $Chain
+    class MinOrderAmountCheck $checkout $Chain
+    class DeliveryZoneCheck $checkout $Chain
+    class BonusPointsCheck $checkout $Chain
+    OrderValidator <|-- RestaurantActiveCheck
+    OrderValidator <|-- ItemsAvailableCheck
+    OrderValidator <|-- MinOrderAmountCheck
+    OrderValidator <|-- DeliveryZoneCheck
+    OrderValidator <|-- BonusPointsCheck
+    OrderValidator o-- "0..1" OrderValidator : next
+
+    abstract class OrderState <<State>> $checkout $lifecycle $State {
+      status : str
+      + pay(facts) : OrderState
+      + start_preparing(facts) : OrderState
+      + mark_ready(facts) : OrderState
+      + pick_up(facts) : OrderState
+      + deliver(facts) : OrderState
+      + cancel(facts) : OrderState
+      + apply(action, facts) : OrderState
+      + available_actions(facts) : dict
+    }
+    class PendingPayment $lifecycle $State
+    class Accepted $lifecycle $State
+    class Preparing $lifecycle $State
+    class ReadyForPickup $lifecycle $State
+    class Delivering $lifecycle $State
+    class Delivered $lifecycle $State
+    class Cancelled $lifecycle $State
+    OrderState <|-- PendingPayment
+    OrderState <|-- Accepted
+    OrderState <|-- Preparing
+    OrderState <|-- ReadyForPickup
+    OrderState <|-- Delivering
+    OrderState <|-- Delivered
+    OrderState <|-- Cancelled
+
+    abstract class "Command[ResultT]" as Command <<Command>> $lifecycle $Command {
+      + {abstract} execute() : ResultT
+      + describe() : dict
+    }
+    class ReorderCommand <<ConcreteCommand>> $lifecycle $Command
+    class CancelOrderCommand <<ConcreteCommand>> $lifecycle $Command
+    class CommandInvoker <<Invoker>> $lifecycle $Command {
+      + run(command, actor_id) : ResultT
+    }
+    interface CommandLog $lifecycle $Command {
+      + record(entry)
+    }
+    class LoggerCommandLog $lifecycle $Command
+    Command <|-- ReorderCommand
+    Command <|-- CancelOrderCommand
+    CommandInvoker ..> Command : executes
+    CommandInvoker o-- CommandLog
+    CommandLog <|.. LoggerCommandLog
+  }
+
+  package "delivery" $checkout $lifecycle {
+    abstract class DeliveryStrategy <<Strategy>> $checkout $Strategy {
+      + {abstract} quote(context) : DeliveryQuote
+      + requires_address() : bool
+    }
+    abstract class CourierDelivery $checkout $Strategy {
+      - _fee(distance_km) : int
+    }
+    class StandardDelivery $checkout $Strategy
+    class ExpressDelivery $checkout $Strategy
+    class PickupDelivery $checkout $Strategy
+    class DeliveryStrategyResolver <<Context>> $checkout $Strategy {
+      + resolve(method) : DeliveryStrategy
+    }
+    DeliveryStrategy <|-- CourierDelivery
+    CourierDelivery <|-- StandardDelivery
+    CourierDelivery <|-- ExpressDelivery
+    DeliveryStrategy <|-- PickupDelivery
+    DeliveryStrategyResolver o-- "3" DeliveryStrategy
+
+    abstract class RouteProvider <<Target>> $lifecycle $Adapter {
+      + {abstract} route(origin, destination) : Route
+    }
+    class OsrmRouteProvider <<Adapter>> $lifecycle $Adapter
+    class StraightLineRouteProvider $lifecycle $Adapter
+    class FallbackRouteProvider $lifecycle $Adapter
+    RouteProvider <|-- OsrmRouteProvider
+    RouteProvider <|-- StraightLineRouteProvider
+    RouteProvider <|-- FallbackRouteProvider
+    FallbackRouteProvider o-- "2" RouteProvider : primary, fallback
+    class "OSRM HTTP API" as OSRM <<Adaptee>> $lifecycle $Adapter
+    OsrmRouteProvider ..> OSRM : requests.get
+  }
+
+  package "pricing" $checkout {
+    abstract class PriceComponent <<Component>> $checkout $Decorator {
+      + subtotal() : int
+      + delivery_fee() : int
+      + {abstract} total() : int
+      + {abstract} lines() : list[PriceLine]
+      + bonus_points_used() : int
+    }
+    class BaseOrderPrice <<ConcreteComponent>> $checkout $Decorator
+    abstract class PriceDecorator <<Decorator>> $checkout $Decorator {
+      # inner : PriceComponent
+      # {abstract} adjustment() : int
+      # {abstract} line() : PriceLine
+    }
+    class RegularCustomerDiscount $checkout $Decorator
+    class PremiumFreeDelivery $checkout $Decorator
+    class BonusPointsRedemption $checkout $Decorator
+    PriceComponent <|-- BaseOrderPrice
+    PriceComponent <|-- PriceDecorator
+    PriceDecorator o-- "1" PriceComponent : inner
+    PriceDecorator <|-- RegularCustomerDiscount
+    PriceDecorator <|-- PremiumFreeDelivery
+    PriceDecorator <|-- BonusPointsRedemption
+    class policy <<module>> $checkout $Decorator {
+      + build_order_price(...) : PriceComponent
+    }
+    policy ..> PriceDecorator : wraps
+  }
+
+  package "payments" $checkout $lifecycle {
+    abstract class PaymentGateway <<Product / Target>> $checkout $Adapter {
+      provider : str
+      + is_online() : bool
+      + {abstract} start(request) : PaymentSession
+      + {abstract} verify(external_id) : PaymentVerification
+      + refund(external_id, amount)
+    }
+    class CashGateway $checkout $Factory
+    class MockGateway $checkout $Factory
+    class StripeGateway <<Adapter>> $checkout $Adapter
+    class "stripe.StripeClient" as StripeSdk <<Adaptee>> $checkout $Adapter
+    class PaymentGatewayFactory <<Factory Method>> $checkout $lifecycle $Factory {
+      + for_method(method) : PaymentGateway
+      + for_provider(provider) : PaymentGateway
+    }
+    PaymentGateway <|-- CashGateway
+    PaymentGateway <|-- MockGateway
+    PaymentGateway <|-- StripeGateway
+    StripeGateway o-- StripeSdk
+    PaymentGatewayFactory ..> PaymentGateway : creates
+  }
+
+  package "events" $checkout $lifecycle {
+    class OrderEventPublisher <<Subject, Singleton>> $checkout $lifecycle $Singleton {
+      - {static} _instance : OrderEventPublisher
+      - _observers : list[OrderObserver]
+      + {static} instance() : OrderEventPublisher
+      + subscribe(observer)
+      + reset()
+      + publish(event)
+    }
+    abstract class OrderObserver <<Observer>> $lifecycle $Observer {
+      + {abstract} on_status_changed(event)
+    }
+    class StatusHistoryObserver $lifecycle $Observer
+    class NotificationObserver $lifecycle $Observer
+    class LoyaltyObserver $lifecycle $Observer
+    class OrderStatusChanged <<event>> $lifecycle $Observer {
+      order_id, customer_id, total
+      old_status, new_status, is_pickup
+    }
+    OrderEventPublisher o-- "*" OrderObserver
+    OrderObserver <|-- StatusHistoryObserver
+    OrderObserver <|-- NotificationObserver
+    OrderObserver <|-- LoyaltyObserver
+    OrderEventPublisher ..> OrderStatusChanged : publishes
+  }
+
+  package "reports" $lifecycle {
+    abstract class ReportGenerator <<AbstractClass>> $lifecycle $Template {
+      key, title, columns
+      + generate(period) : Report <<template method>>
+      # {abstract} collect(period) : records
+      # {abstract} aggregate(records) : groups
+      # {abstract} format_rows(groups) : rows
+      # totals(rows) : dict <<hook>>
+    }
+    class SalesByRestaurantReport $lifecycle $Template
+    class PopularDishesReport $lifecycle $Template
+    class CourierPerformanceReport $lifecycle $Template
+    interface ReportDataSource $lifecycle $Template {
+      + orders_created(period)
+      + items_delivered(period)
+      + courier_deliveries(period)
+    }
+    ReportGenerator <|-- SalesByRestaurantReport
+    ReportGenerator <|-- PopularDishesReport
+    ReportGenerator <|-- CourierPerformanceReport
+    SalesByRestaurantReport o-- ReportDataSource
+    PopularDishesReport o-- ReportDataSource
+    CourierPerformanceReport o-- ReportDataSource
+  }
+}
+
+' ============================================================ repositories
+package "repositories (Pure Fabrication)" $checkout $lifecycle {
+  class OrderRepository $checkout $lifecycle {
+    + create_from_draft(draft, price, status, eta) : Order
+    + get_with_details(id, for_update) : Order
+    + past_order(id, customer_id) : PastOrder
+  }
+  class DishRepository $lifecycle {
+    + dish_snapshots(restaurant_id, ids)
+  }
+  class LoyaltyRepository $checkout $lifecycle {
+    + rules() : LoyaltyRules
+    + get_account(customer_id, for_update)
+    + record_completed_order(...)
+  }
+  class NotificationRepository $lifecycle {
+    + notify(user_id, type, message, order_id)
+  }
+  class StatusHistoryRepository $lifecycle {
+    + record_status(order_id, status, by)
+  }
+  class ReportRepository $lifecycle
+}
+ReportDataSource <|.. ReportRepository
+
+' ================================================================== models
+package "models (SQLAlchemy)" $lifecycle {
+  class Order $lifecycle {
+    status, delivery_method
+    subtotal, delivery_fee, discount, total
+    route, picked_up_at
+    + change_status(status)
+  }
+  class OrderItem {
+    name, price, quantity
+  }
+  class OrderStatusHistory
+  class Payment
+  class LoyaltyAccount {
+    points_balance, card_type
+    + redeem(points, order)
+    + refund_points(points, order)
+    + extend_premium(days, now)
+  }
+  Order *-- "1..*" OrderItem
+  Order *-- "*" OrderStatusHistory
+  Order o-- "*" Payment
+}
+
+' ============================================================ collaboration
+orders_bp --> CheckoutFacade
+orders_bp --> OrderQuoteService
+orders_bp --> OrderService
+orders_bp --> OrderActions
+payments_bp --> PaymentService
+reports_bp --> ReportService
+
+CheckoutFacade --> OrderQuoteService
+CheckoutFacade --> PaymentService
+CheckoutFacade --> OrderRepository
+CheckoutFacade --> LoyaltyRepository
+CheckoutFacade --> OrderEventPublisher
+CheckoutFacade ..> OrderState : initial_state()
+
+OrderQuoteService ..> OrderBuilder : uses
+OrderQuoteService --> DeliveryStrategyResolver
+OrderQuoteService --> OrderValidator : chain head
+OrderQuoteService ..> policy : prices with
+
+OrderService --> OrderRepository
+OrderService --> RouteProvider
+OrderService --> PaymentGatewayFactory
+OrderService --> OrderEventPublisher
+OrderService ..> OrderState : state_for().apply()
+
+PaymentService --> PaymentGatewayFactory
+PaymentService --> OrderEventPublisher
+
+OrderActions --> CommandInvoker
+OrderActions ..> ReorderCommand : creates
+OrderActions ..> CancelOrderCommand : creates
+CancelOrderCommand --> OrderService : receiver
+ReorderCommand --> OrderRepository : PastOrders
+ReorderCommand --> DishRepository : CurrentMenu
+
+ReportService o-- "*" ReportGenerator
+
+StatusHistoryObserver --> StatusHistoryRepository : sink
+NotificationObserver --> NotificationRepository : sink
+LoyaltyObserver --> LoyaltyRepository : ledger
+LoyaltyObserver --> NotificationRepository
+
+order_events ..> OrderEventPublisher
+order_events ..> Order
+OrderRepository ..> Order
+OrderRepository ..> OrderDraft : persists
+@enduml

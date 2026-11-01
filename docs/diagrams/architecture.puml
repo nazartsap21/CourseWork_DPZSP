@@ -1,0 +1,82 @@
+@startuml architecture
+title Forkful — layers and components
+skinparam shadowing false
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+skinparam defaultTextAlignment center
+
+actor "Customer / Courier / Admin" as User
+
+node "Browser" {
+  component "Next.js App Router pages\n(catalog, cart, checkout, orders,\naccount, courier, admin)" as Pages
+  component "lib/api.ts\n(one API client, JWT header)" as ApiClient
+  component "SWR\n(cache + polling)" as Swr
+  component "react-leaflet\n(OSM tiles)" as Maps
+}
+
+node "Next.js server (:3000)" {
+  component "rewrites /api/* →\nFlask (no CORS)" as Rewrites
+}
+
+node "Flask app (:5000)" {
+  package "api (blueprints, /api/v1)" {
+    component "auth, catalog, orders, payments,\nnotifications, courier, favorites,\nloyalty, admin_catalog,\nadmin_operations, reports" as Blueprints
+    component "schemas (Pydantic v2)" as Schemas
+    component "errors.py\n(DomainError → HTTP)" as Errors
+    component "security.py\n(JWT, roles_required)" as Security
+  }
+  package "services (use cases)" {
+    component "CheckoutFacade, OrderQuoteService,\nOrderService, PaymentService,\nOrderActions, LoyaltyService,\nReportService, Admin*Service, ..." as Services
+  }
+  package "domain (patterns, rules; no Flask)" {
+    component "orders: Builder, Chain,\nState, Command" as DOrders
+    component "delivery: Strategy,\nroute Adapters, tracking" as DDelivery
+    component "pricing: Decorator" as DPricing
+    component "payments: Factory Method,\nStripe Adapter" as DPayments
+    component "events: Observer,\nSingleton publisher" as DEvents
+    component "reports: Template Method" as DReports
+  }
+  package "repositories (all queries)" {
+    component "Order, Dish, Restaurant, Loyalty,\nNotification, Payment, Report, ...\nRepository" as Repos
+  }
+  package "models (SQLAlchemy 2.0)" {
+    component "User, Restaurant, Dish, Order,\nPayment, LoyaltyAccount, ..." as Models
+  }
+  component "container.py\n(manual DI)" as Container
+}
+
+database "PostgreSQL 16\n(Docker)" as Db
+cloud "Stripe\n(test mode)" as Stripe
+cloud "OSRM\nrouter.project-osrm.org" as Osrm
+cloud "OpenStreetMap\ntiles" as Osm
+
+User --> Pages
+Pages --> Swr
+Swr --> ApiClient
+Pages --> ApiClient
+Pages --> Maps
+Maps --> Osm
+ApiClient --> Rewrites : /api/v1/*
+Rewrites --> Blueprints
+
+Blueprints --> Schemas
+Blueprints --> Security
+Blueprints ..> Errors
+Blueprints --> Services : get_services()
+Container ..> Services : builds and wires
+Services --> DOrders
+Services --> DDelivery
+Services --> DPricing
+Services --> DPayments
+Services --> DEvents
+Services --> DReports
+Services --> Repos
+DEvents ..> Repos : observers write\nthrough sink interfaces
+DReports ..> Repos : ReportDataSource
+Repos --> Models
+Models --> Db
+
+DPayments --> Stripe : StripeGateway
+DDelivery --> Osrm : OsrmRouteProvider
+Pages --> Stripe : redirect to\nStripe Checkout
+@enduml

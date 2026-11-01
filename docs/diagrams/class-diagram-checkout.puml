@@ -1,0 +1,7 @@
+@startuml class-diagram-checkout
+' A focused view of class-diagram.puml: the same classes, filtered by tag.
+!include class-diagram.puml!0
+title Checkout: Facade, Builder, Chain of Responsibility, Strategy, Decorator, Factory Method, Adapter
+remove *
+restore $checkout
+@enduml

@@ -1,1 +1,1 @@
-"""Delivery options (Strategy pattern), geometry helpers, later routing and tracking."""
+"""Delivery options (Strategy), routing adapters (Adapter) and courier position tracking."""

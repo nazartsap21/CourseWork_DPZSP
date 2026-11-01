@@ -1,0 +1,44 @@
+@startuml order-state
+title Order lifecycle (State pattern: domain/orders/states.py)
+skinparam shadowing false
+hide empty description
+
+state "PendingPayment\n(pending_payment)" as PendingPayment
+state "Accepted\n(accepted)" as Accepted
+state "Preparing\n(preparing)" as Preparing
+state "ReadyForPickup\n(ready_for_pickup)" as ReadyForPickup
+state "Delivering\n(delivering)" as Delivering
+state "Delivered\n(delivered)" as Delivered
+state "Cancelled\n(cancelled)" as Cancelled
+
+[*] --> PendingPayment : place order\n[online payment]
+[*] --> Accepted : place order\n[cash]
+
+PendingPayment --> Accepted : pay\n(payment verified)
+Accepted --> Preparing : start_preparing\n(admin)
+Preparing --> ReadyForPickup : mark_ready\n(admin)
+ReadyForPickup --> Delivering : pick_up\n[courier order]\n(assigned courier)
+ReadyForPickup --> Delivered : deliver\n[pickup order]\n(admin)
+Delivering --> Delivered : deliver\n(assigned courier)
+
+PendingPayment --> Cancelled : cancel\n(customer / admin)
+Accepted --> Cancelled : cancel\n(customer / admin,\nrefund + points back)
+
+Delivered --> [*]
+Cancelled --> [*]
+
+note right of ReadyForPickup
+  A courier first "takes" the order
+  (assigns themselves); the status
+  stays ready_for_pickup until pick_up.
+  pick_up stores the OSRM route
+  and picked_up_at.
+end note
+
+note bottom of Delivered
+  LoyaltyObserver credits bonus points;
+  cash orders are marked paid.
+end note
+
+note "Any other action raises\nInvalidTransitionError → HTTP 409" as N1
+@enduml

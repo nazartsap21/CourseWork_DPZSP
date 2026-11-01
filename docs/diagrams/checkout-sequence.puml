@@ -1,0 +1,79 @@
+@startuml checkout-sequence
+title Placing an order: POST /api/v1/orders
+skinparam shadowing false
+skinparam sequenceMessageAlign left
+autonumber
+
+actor Customer
+participant "Next.js\ncheckout page" as UI
+participant "orders blueprint\n(api/v1/orders.py)" as API
+participant "CheckoutFacade" as Facade #ADB5BD
+participant "PaymentService" as PaySvc
+participant "PaymentGatewayFactory" as Factory #D8B48A
+participant "OrderQuoteService" as Quotes
+participant "OrderBuilder" as Builder #8CE99A
+participant "DeliveryStrategy" as Strategy #FFE066
+participant "OrderValidator chain" as Chain #74C0FC
+participant "PriceComponent\ndecorators" as Price #FFA94D
+participant "OrderState" as State #FF8787
+participant "OrderRepository" as Repo
+participant "OrderEventPublisher" as Pub #63E6BE
+participant "Observers" as Obs #B197FC
+participant "PaymentGateway\n(Stripe / mock / cash)" as Gateway #F783AC
+database PostgreSQL as DB
+
+Customer -> UI : "Place order"
+UI -> API : POST /orders {restaurant_id, items,\ndelivery_method, destination, payment_method, bonus_points}
+API -> API : parse_body(CheckoutIn)
+API -> Facade : place_order(CheckoutRequest, customer_id)
+
+Facade -> PaySvc : gateway_for(payment_method)
+PaySvc -> Factory : for_method("stripe")
+Factory --> PaySvc : StripeGateway or MockGateway
+PaySvc --> Facade : gateway
+
+Facade -> Quotes : quote(request, customer_id)
+Quotes -> Builder : for_restaurant().add_item()...\n.with_delivery().redeem_points().with_payment()
+Builder --> Quotes : OrderDraft
+Quotes -> Strategy : resolve(method).quote(DeliveryContext)
+Strategy --> Quotes : DeliveryQuote (fee, ETA)
+Quotes -> Chain : validate(OrderValidationContext)
+note right of Chain
+  RestaurantActiveCheck → ItemsAvailableCheck →
+  MinOrderAmountCheck → DeliveryZoneCheck →
+  BonusPointsCheck; the first failure stops the chain
+end note
+Quotes -> Price : build_order_price(...)\nBase → RegularCustomerDiscount\n→ PremiumFreeDelivery → BonusPointsRedemption
+Price --> Quotes : PriceBreakdown
+Quotes --> Facade : Quote (draft, delivery, price, validation_error)
+
+alt validation_error
+  Facade --> API : raise OrderValidationError
+  API --> UI : 422 {error: {code, message, details}}
+else valid
+  Facade -> State : initial_state(pays_online)
+  State --> Facade : PendingPayment / Accepted
+  Facade -> Repo : create_from_draft(draft, price, status, eta)
+  Facade -> Pub : publish(OrderStatusChanged)
+  Pub -> Obs : on_status_changed(event)
+  Obs -> DB : status history row,\nnotification
+  Facade -> Facade : _spend_points() (row lock)
+  Facade -> PaySvc : start(order, gateway)
+  PaySvc -> Gateway : start(PaymentRequest)
+  Gateway --> PaySvc : PaymentSession (external_id, redirect_url)
+  Facade -> Repo : commit()
+  Repo -> DB : COMMIT (one transaction)
+  Facade --> API : CheckoutResult
+  API --> UI : 201 {order, payment_redirect_url}
+end
+
+opt online payment
+  UI -> Customer : redirect to Stripe Checkout\n(or the mock success page)
+  Customer -> UI : /checkout/success?session_id=...
+  UI -> API : POST /payments/confirm {session_id}
+  API -> PaySvc : confirm(external_id, customer_id)
+  PaySvc -> Gateway : verify(external_id)
+  PaySvc -> State : state_for(status).pay(facts)
+  PaySvc -> Pub : publish(pending_payment → accepted)
+end
+@enduml

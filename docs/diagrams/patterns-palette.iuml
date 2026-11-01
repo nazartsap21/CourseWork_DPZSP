@@ -1,0 +1,41 @@
+' Shared colors: one color per GoF pattern, used by every class diagram.
+' Classes also carry a stereotype, so the role is readable in black and white.
+!$Strategy = "#FFE066"
+!$Decorator = "#FFA94D"
+!$Builder = "#8CE99A"
+!$Chain = "#74C0FC"
+!$State = "#FF8787"
+!$Observer = "#B197FC"
+!$Singleton = "#63E6BE"
+!$Factory = "#D8B48A"
+!$Adapter = "#F783AC"
+!$Facade = "#ADB5BD"
+!$Command = "#E599F7"
+!$Template = "#C0EB75"
+
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #555555
+  ArrowColor #444444
+}
+hide empty members
+
+legend right
+  |= Color |= Pattern |
+  |<$Strategy>   | Strategy |
+  |<$Decorator>  | Decorator |
+  |<$Builder>    | Builder |
+  |<$Chain>      | Chain of Responsibility |
+  |<$State>      | State |
+  |<$Observer>   | Observer |
+  |<$Singleton>  | Singleton (+ Observer subject) |
+  |<$Factory>    | Factory Method |
+  |<$Adapter>    | Adapter |
+  |<$Facade>     | Facade |
+  |<$Command>    | Command |
+  |<$Template>   | Template Method |
+  |<#FFFFFF>     | no GoF pattern (services, repositories, models) |
+endlegend

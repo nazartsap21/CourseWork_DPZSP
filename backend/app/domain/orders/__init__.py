@@ -1,1 +1,2 @@
-"""Order construction (Builder), validation (Chain of Responsibility), later states and commands."""
+"""Order construction (Builder), validation (Chain of Responsibility), lifecycle (State)
+and user actions (Command)."""

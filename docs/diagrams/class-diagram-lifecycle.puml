@@ -1,0 +1,7 @@
+@startuml class-diagram-lifecycle
+' A focused view of class-diagram.puml: the same classes, filtered by tag.
+!include class-diagram.puml!0
+title Order lifecycle: State, Observer + Singleton, Command, Adapter (routing), Template Method (reports)
+remove *
+restore $lifecycle
+@enduml
